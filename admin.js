@@ -123,7 +123,7 @@
           '<span class="mon">' + d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() + '</span>' +
         '</div>' +
         '<div class="ec-body">' +
-          '<div class="ec-title">' + esc(P.fmtTime(ev.time)) + '</div>' +
+          '<div class="ec-title">' + esc(P.fmtTimeRange(ev.time, ev.endTime)) + '</div>' +
           '<div class="ec-loc">' + esc(ev.location) + '</div>' +
           '<div class="ec-meta"><span class="count">' + ev.filled + '/' + ev.cap + '</span>' +
             (ev.waitlist ? '<span class="pill wait">' + ev.waitlist + ' waitlist</span>' : '') + status + '</div>' +
@@ -149,7 +149,7 @@
         const r = await adminApi('adminListEvents');
         const last = r.events[0];
         const firstGym = P.locations()[0];
-        ev = { date: '', time: last ? last.time : '19:00', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, notes: '', open: true };
+        ev = { date: '', time: last ? last.time : '19:00', endTime: last ? last.endTime || '' : '', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, notes: '', open: true };
       }
     } catch (e) {
       if (password) showError(e);
@@ -162,10 +162,11 @@
       '<form class="card" id="ev-form" novalidate>' +
         '<div class="form-grid">' +
           '<div><label for="f-date">Date</label><input id="f-date" type="date" name="date" required value="' + esc(ev.date) + '"></div>' +
-          '<div><label for="f-time">Time</label><input id="f-time" type="time" name="time" required value="' + esc(ev.time) + '"></div>' +
-          '<div class="full">' + locationField(ev.location) + '</div>' +
+          '<div><label for="f-time">Start time</label><input id="f-time" type="time" name="time" required value="' + esc(ev.time) + '"></div>' +
+          '<div><label for="f-end">End time (optional)</label><input id="f-end" type="time" name="endTime" value="' + esc(ev.endTime || '') + '"></div>' +
           '<div><label for="f-cap">Roster size</label><input id="f-cap" type="number" name="cap" min="1" max="200" inputmode="numeric" value="' + esc(ev.cap) + '"></div>' +
-          '<div style="align-self:end"><label class="check"><input type="checkbox" name="open"' + (ev.open ? ' checked' : '') + '><span>Signups open</span></label></div>' +
+          '<div class="full">' + locationField(ev.location) + '</div>' +
+          '<div class="full"><label class="check"><input type="checkbox" name="open"' + (ev.open ? ' checked' : '') + '><span>Signups open</span></label></div>' +
           '<div class="full"><label for="f-notes">Notes (optional)</label><textarea id="f-notes" name="notes" maxlength="500" placeholder="e.g. Bring a white and a dark shirt">' + esc(ev.notes) + '</textarea></div>' +
         '</div>' +
         '<button class="btn primary block" type="submit">' + (id ? 'Save changes' : 'Create game') + '</button>' +
@@ -192,6 +193,7 @@
         id: id || '',
         date: field(form, 'date').value,
         time: field(form, 'time').value,
+        endTime: field(form, 'endTime').value,
         location: field(form, 'loc-choice').value === OTHER ? field(form, 'location').value : field(form, 'loc-choice').value,
         cap: field(form, 'cap').value || 15,
         notes: field(form, 'notes').value,

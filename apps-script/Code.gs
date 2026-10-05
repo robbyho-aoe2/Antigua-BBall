@@ -6,7 +6,7 @@
  * See README.md for the full setup steps.
  *
  * Data lives in two tabs (created automatically):
- *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created
+ *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime
  *   Signups: EventID | Name | Email | SignedUpAt | Order | Token
  *
  * The admin password lives in Script Properties under ADMIN_PASSWORD.
@@ -15,7 +15,7 @@
 const TZ = 'America/Guatemala';
 const EVENTS_SHEET = 'Events';
 const SIGNUPS_SHEET = 'Signups';
-const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created'];
+const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created', 'EndTime'];
 const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token'];
 const DEFAULT_CAP = 15;
 const MAX_NAME = 40;
@@ -233,6 +233,8 @@ function adminSaveEvent(req) {
   if (!date) fail_('Pick a date.');
   const time = normTime_(e.time);
   if (!/^\d{2}:\d{2}$/.test(time)) fail_('Pick a time.');
+  const endTime = e.endTime ? normTime_(e.endTime) : '';
+  if (endTime && !/^\d{2}:\d{2}$/.test(endTime)) fail_('End time doesn\'t look right.');
   const location = cleanText_(e.location, 80);
   if (!location) fail_('Enter a location.');
   const cap = Math.floor(Number(e.cap));
@@ -245,10 +247,11 @@ function adminSaveEvent(req) {
     if (e.id) {
       const ev = findEvent_(e.id);
       sh.getRange(ev.row, 2, 1, 6).setValues([[date, time, safeCell_(location), cap, safeCell_(notes), open]]);
+      sh.getRange(ev.row, 9).setValue(endTime);
       return { id: ev.id };
     }
     const id = newId_();
-    sh.appendRow([id, date, time, safeCell_(location), cap, safeCell_(notes), open, new Date()]);
+    sh.appendRow([id, date, time, safeCell_(location), cap, safeCell_(notes), open, new Date(), endTime]);
     return { id: id };
   });
 }
@@ -280,7 +283,7 @@ function adminDuplicateEvent(req) {
     }
     const id = newId_();
     const date = addDays_(src.date, 7);
-    sheet_(EVENTS_SHEET).appendRow([id, date, src.time, safeCell_(src.location), src.cap, safeCell_(src.notes), true, new Date()]);
+    sheet_(EVENTS_SHEET).appendRow([id, date, src.time, safeCell_(src.location), src.cap, safeCell_(src.notes), true, new Date(), src.endTime]);
     return { id: id, date: date };
   });
 }
@@ -414,7 +417,12 @@ function sheet_(name) {
 
 function ensureSheets_() {
   const ss = SpreadsheetApp.getActive();
-  ensureSheet_(ss, EVENTS_SHEET, EVENT_HEADERS, ['B:C']);
+  const events = ensureSheet_(ss, EVENTS_SHEET, EVENT_HEADERS, ['B:C', 'I:I']);
+  // Sheets made before the EndTime column existed: add its header once.
+  if (events.getRange(1, 9).getValue() === '') {
+    events.getRange(1, 9).setValue('EndTime').setFontWeight('bold');
+    events.getRange('I:I').setNumberFormat('@');
+  }
   ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
 }
 
@@ -443,6 +451,7 @@ function readEvents_() {
       id: String(r[0]).trim(),
       date: normDate_(r[1]),
       time: normTime_(disp[i][2]),
+      endTime: normTime_(disp[i][8]),
       location: String(r[3]).trim(),
       cap: Number(r[4]) >= 1 ? Math.floor(Number(r[4])) : DEFAULT_CAP,
       notes: String(r[5] || '').trim(),
@@ -524,6 +533,7 @@ function publicEvent_(ev, list, today) {
     id: ev.id,
     date: ev.date,
     time: ev.time,
+    endTime: ev.endTime,
     location: ev.location,
     cap: ev.cap,
     notes: ev.notes,

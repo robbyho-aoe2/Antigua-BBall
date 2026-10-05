@@ -143,6 +143,15 @@
     return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
   }
 
+  // "7:00 PM" or "7:00 – 9:00 PM" when the game has an end time.
+  function fmtTimeRange(start, end) {
+    if (!end) return fmtTime(start);
+    const a = fmtTime(start);
+    const b = fmtTime(end);
+    const suffix = function (s) { return s.slice(s.indexOf(' ')); };
+    return (a.indexOf(' ') > 0 && suffix(a) === suffix(b) ? a.slice(0, a.indexOf(' ')) : a) + ' – ' + b;
+  }
+
   /* ---------- UI bits ---------- */
 
   let toastTimer;
@@ -181,7 +190,7 @@
   }
 
   window.Pickup = {
-    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, toDate: toDate, store: store, cache: cache,
+    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, store: store, cache: cache,
     toast: toast, busy: busy, applyBranding: applyBranding,
     t: t, tn: tn, locale: locale, locations: locations, findLocation: findLocation, mapsUrl: mapsUrl, useLang: useLang, lang: function () { return lang; },
   };

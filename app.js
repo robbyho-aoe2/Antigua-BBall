@@ -148,7 +148,7 @@
           '<span class="mon">' + d.toLocaleDateString(P.locale(), { month: 'short' }).replace('.', '').toUpperCase() + '</span>' +
         '</div>' +
         '<div class="ec-body">' +
-          '<div class="ec-title">' + esc(P.fmtTime(ev.time)) + '</div>' +
+          '<div class="ec-title">' + esc(P.fmtTimeRange(ev.time, ev.endTime)) + '</div>' +
           '<div class="ec-loc">' + esc(ev.location) + '</div>' +
           '<div class="meter' + (ev.filled >= ev.cap ? ' full' : '') + '"><span style="width:' + pct + '%"></span></div>' +
           '<div class="ec-meta">' +
@@ -310,7 +310,7 @@
       '<a class="back" href="./" data-nav>' + t('backAllGames') + '</a>' +
       '<div class="card event-head">' +
         '<h2>' + esc(P.fmtDate(ev.date, { weekday: 'long', month: 'long', day: 'numeric' })) + '</h2>' +
-        '<div class="when">' + esc(P.fmtTime(ev.time)) + '</div>' +
+        '<div class="when">' + esc(P.fmtTimeRange(ev.time, ev.endTime)) + '</div>' +
         '<a class="where" href="' + esc(P.mapsUrl(ev.location)) + '" target="_blank" rel="noopener">' +
           '<span class="pin" aria-hidden="true">📍</span><span><span class="where-name">' + esc(ev.location) + '</span>' +
           (P.findLocation(ev.location) && P.findLocation(ev.location).address
@@ -546,7 +546,7 @@
 
   async function share(ev) {
     const url = location.origin + location.pathname + '?event=' + encodeURIComponent(ev.id);
-    const text = t('shareText', { date: P.fmtDate(ev.date), time: P.fmtTime(ev.time), loc: ev.location });
+    const text = t('shareText', { date: P.fmtDate(ev.date), time: P.fmtTimeRange(ev.time, ev.endTime), loc: ev.location });
     if (navigator.share) {
       try { await navigator.share({ title: SITE, text: text, url: url }); } catch (e) { /* cancelled */ }
       return;

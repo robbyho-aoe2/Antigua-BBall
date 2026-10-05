@@ -132,7 +132,7 @@ The home page also shows a **🏆 Regulars** top-10 leaderboard (names only).
 
 ### For you (admin)
 
-- Create, edit, and delete games: date, time, location (dropdown of your gyms, or "Other…"), roster size (default 15), notes, and an open/closed toggle. On the player page, the location links to Google Maps.
+- Create, edit, and delete games: date, start time, optional end time, location (dropdown of your gyms, or "Other…"), roster size (default 15), notes, and an open/closed toggle. On the player page, the location links to Google Maps.
 - Manage the list: add a name (email optional), edit a name or email, remove someone, and move people up or down with ↑/↓.
 - See every player's email and signup time. This is how you help someone who's stuck.
 - The password is checked by the server on every admin action. Your browser only remembers it until you close the tab.
@@ -143,12 +143,12 @@ The Sheet is meant to be readable and editable by hand:
 
 **Events tab**
 
-| ID | Date | Time | Location | Cap | Notes | Open | Created |
-|---|---|---|---|---|---|---|---|
-| a1b2c3d4 | 2026-10-14 | 19:00 | Cancha Central | 15 | Bring 2 shirts | TRUE | … |
+| ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime |
+|---|---|---|---|---|---|---|---|---|
+| a1b2c3d4 | 2026-10-14 | 19:00 | Centro Integral Deportivo Ciudad Vieja | 15 | Bring 2 shirts | TRUE | … | 21:00 |
 
 - **Date:** `YYYY-MM-DD`. `M/D/YYYY` also works.
-- **Time:** 24-hour like `19:00`. `7:00 PM` also works.
+- **Time / EndTime:** 24-hour like `19:00`. `7:00 PM` also works. EndTime is optional; leave it blank if there isn't one.
 - **Open:** `TRUE` or `FALSE`. Blank counts as open.
 - **ID:** any short unique text, if you add a row by hand.
 
