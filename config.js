@@ -15,7 +15,7 @@ window.APP_CONFIG = {
     {
       name: 'Centro Integral Deportivo Ciudad Vieja',
       address: '185 5 Calle, Ciudad Vieja, Guatemala',
-      mapUrl: '',
+      mapUrl: 'https://maps.app.goo.gl/peQhwgZyHqcAAcET8',
     },
   ],
 };
