@@ -311,8 +311,11 @@
       '<div class="card event-head">' +
         '<h2>' + esc(P.fmtDate(ev.date, { weekday: 'long', month: 'long', day: 'numeric' })) + '</h2>' +
         '<div class="when">' + esc(P.fmtTime(ev.time)) + '</div>' +
-        '<div class="where">📍 <a href="https://www.google.com/maps/search/?api=1&query=' +
-          encodeURIComponent(ev.location) + '" target="_blank" rel="noopener">' + esc(ev.location) + '</a></div>' +
+        '<a class="where" href="' + esc(P.mapsUrl(ev.location)) + '" target="_blank" rel="noopener">' +
+          '<span class="pin" aria-hidden="true">📍</span><span><span class="where-name">' + esc(ev.location) + '</span>' +
+          (P.findLocation(ev.location) && P.findLocation(ev.location).address
+            ? '<span class="where-addr">' + esc(P.findLocation(ev.location).address) + '</span>' : '') +
+          '<span class="where-map">' + t('openMap') + ' ↗</span></span></a>' +
         (ev.notes ? '<div class="notes">' + esc(ev.notes) + '</div>' : '') +
         '<div class="row">' + pill + '<button class="btn sm" id="share-btn">' + t('share') + '</button></div>' +
       '</div>';

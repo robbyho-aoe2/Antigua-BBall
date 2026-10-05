@@ -148,7 +148,8 @@
         // New game: prefill from the most recent one.
         const r = await adminApi('adminListEvents');
         const last = r.events[0];
-        ev = { date: '', time: last ? last.time : '19:00', location: last ? last.location : '', cap: last ? last.cap : 15, notes: '', open: true };
+        const firstGym = P.locations()[0];
+        ev = { date: '', time: last ? last.time : '19:00', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, notes: '', open: true };
       }
     } catch (e) {
       if (password) showError(e);
@@ -162,7 +163,7 @@
         '<div class="form-grid">' +
           '<div><label for="f-date">Date</label><input id="f-date" type="date" name="date" required value="' + esc(ev.date) + '"></div>' +
           '<div><label for="f-time">Time</label><input id="f-time" type="time" name="time" required value="' + esc(ev.time) + '"></div>' +
-          '<div class="full"><label for="f-loc">Location</label><input id="f-loc" type="text" name="location" maxlength="80" required value="' + esc(ev.location) + '"></div>' +
+          '<div class="full">' + locationField(ev.location) + '</div>' +
           '<div><label for="f-cap">Roster size</label><input id="f-cap" type="number" name="cap" min="1" max="200" inputmode="numeric" value="' + esc(ev.cap) + '"></div>' +
           '<div style="align-self:end"><label class="check"><input type="checkbox" name="open"' + (ev.open ? ' checked' : '') + '><span>Signups open</span></label></div>' +
           '<div class="full"><label for="f-notes">Notes (optional)</label><textarea id="f-notes" name="notes" maxlength="500" placeholder="e.g. Bring a white and a dark shirt">' + esc(ev.notes) + '</textarea></div>' +
@@ -179,13 +180,19 @@
         : '');
 
     const form = document.getElementById('ev-form');
+    const choice = field(form, 'loc-choice');
+    choice.onchange = function () {
+      const other = choice.value === OTHER;
+      field(form, 'location').classList.toggle('hidden', !other);
+      if (other) field(form, 'location').focus();
+    };
     form.onsubmit = function (e) {
       e.preventDefault();
       const payload = {
         id: id || '',
         date: field(form, 'date').value,
         time: field(form, 'time').value,
-        location: field(form, 'location').value,
+        location: field(form, 'loc-choice').value === OTHER ? field(form, 'location').value : field(form, 'loc-choice').value,
         cap: field(form, 'cap').value || 15,
         notes: field(form, 'notes').value,
         open: field(form, 'open').checked,
@@ -236,6 +243,27 @@
     };
 
     renderPlayers(id, ev, signups);
+  }
+
+  const OTHER = '__other__';
+
+  // Dropdown of gyms from config.js, plus "Other…" for a one-off place.
+  function locationField(current) {
+    const gyms = P.locations();
+    const known = gyms.some(function (g) { return g.name === current; });
+    const isOther = !!current && !known;
+    return (
+      '<label for="f-loc">Location</label>' +
+      '<select id="f-loc" name="loc-choice">' +
+        gyms.map(function (g) {
+          return '<option value="' + esc(g.name) + '"' + (g.name === current ? ' selected' : '') + '>' + esc(g.name) + '</option>';
+        }).join('') +
+        '<option value="' + OTHER + '"' + (isOther || !gyms.length ? ' selected' : '') + '>Other…</option>' +
+      '</select>' +
+      '<input type="text" name="location" maxlength="80" placeholder="Type the location" aria-label="Other location"' +
+        ' class="' + (isOther || !gyms.length ? '' : 'hidden') + '" value="' + esc(isOther ? current : '') + '" style="margin-top:8px">' +
+      '<p class="hint">Add or change gyms in config.js (LOCATIONS).</p>'
+    );
   }
 
   async function refreshPlayers(id) {

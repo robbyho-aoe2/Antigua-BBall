@@ -65,6 +65,8 @@ API_URL: 'https://script.google.com/macros/s/AKfy.../exec',
 
 While you're there, you can also change `SITE_NAME`, `TAGLINE` and `TAGLINE_ES` (the Spanish tagline).
 
+**Gyms (`LOCATIONS`):** the list of places shown in the admin's Location dropdown. The first one is the default for new games. Each gym has a `name`, an `address`, and an optional `mapUrl`. To pin the exact spot, open the gym in Google Maps, tap **Share → Copy link**, and paste that link as `mapUrl`. Otherwise the map link searches for the name and address. If you start playing somewhere new, add another `{ name, address, mapUrl }` entry. For a one-off place, pick **Other…** in the dropdown and type it in.
+
 ### 6. Turn on GitHub Pages
 
 1. On GitHub, go to the repo's **Settings → Pages**.
@@ -130,7 +132,7 @@ The home page also shows a **🏆 Regulars** top-10 leaderboard (names only).
 
 ### For you (admin)
 
-- Create, edit, and delete games: date, time, location, roster size (default 15), notes, and an open/closed toggle.
+- Create, edit, and delete games: date, time, location (dropdown of your gyms, or "Other…"), roster size (default 15), notes, and an open/closed toggle. On the player page, the location links to Google Maps.
 - Manage the list: add a name (email optional), edit a name or email, remove someone, and move people up or down with ↑/↓.
 - See every player's email and signup time. This is how you help someone who's stuck.
 - The password is checked by the server on every admin action. Your browser only remembers it until you close the tab.

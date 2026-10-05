@@ -126,6 +126,23 @@
     return ((h % 12) || 12) + ':' + m[2] + ' ' + ampm;
   }
 
+  /* ---------- locations ---------- */
+
+  function locations() { return Array.isArray(CFG.LOCATIONS) ? CFG.LOCATIONS : []; }
+
+  // Matches a game's location text to a gym from config.js (case-insensitive).
+  function findLocation(name) {
+    const key = String(name || '').trim().toLowerCase();
+    return locations().find(function (l) { return String(l.name).trim().toLowerCase() === key; }) || null;
+  }
+
+  function mapsUrl(name) {
+    const loc = findLocation(name);
+    if (loc && loc.mapUrl) return loc.mapUrl;
+    const query = loc && loc.address ? loc.name + ', ' + loc.address : name;
+    return 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(query);
+  }
+
   /* ---------- UI bits ---------- */
 
   let toastTimer;
@@ -166,6 +183,6 @@
   window.Pickup = {
     api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, toDate: toDate, store: store, cache: cache,
     toast: toast, busy: busy, applyBranding: applyBranding,
-    t: t, tn: tn, locale: locale, useLang: useLang, lang: function () { return lang; },
+    t: t, tn: tn, locale: locale, locations: locations, findLocation: findLocation, mapsUrl: mapsUrl, useLang: useLang, lang: function () { return lang; },
   };
 })();
