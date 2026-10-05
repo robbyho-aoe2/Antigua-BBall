@@ -18,6 +18,12 @@
     },
   };
 
+  // Last server responses, so pages can paint instantly and refresh in the background.
+  const cache = {
+    get(key) { return store.get('pickup.cache.' + key, null); },
+    set(key, value) { store.set('pickup.cache.' + key, value); },
+  };
+
   /* ---------- language ---------- */
 
   // A saved choice wins; otherwise use the phone's preferred language.
@@ -158,7 +164,7 @@
   }
 
   window.Pickup = {
-    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, toDate: toDate, store: store,
+    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, toDate: toDate, store: store, cache: cache,
     toast: toast, busy: busy, applyBranding: applyBranding,
     t: t, tn: tn, locale: locale, useLang: useLang, lang: function () { return lang; },
   };

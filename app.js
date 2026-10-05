@@ -20,6 +20,7 @@
   ];
 
   let renderSeq = 0;
+  let statsReq = null; // { email, promise }: one stats request per page view, shared by everything that needs it
 
   function field(form, name) { return form.querySelector('[name="' + name + '"]'); }
 
@@ -76,7 +77,21 @@
     if (document.visibilityState === 'visible' && !app.querySelector('form[data-dirty]')) route(true);
   });
 
-  function loading() { app.innerHTML = '<div class="loading">' + t('loading') + '</div>'; }
+  function loading() {
+    app.innerHTML = '<div class="skeleton sk-title"></div>' +
+      '<div class="skeleton sk-card"></div><div class="skeleton sk-card"></div>' +
+      '<span class="visually-hidden">' + t('loading') + '</span>';
+  }
+
+  function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
+
+  function getStats(email) {
+    if (!statsReq || statsReq.email !== email) {
+      statsReq = { email: email, promise: P.api('stats', { email: email }) };
+      statsReq.promise.then(function (r) { P.cache.set('stats.' + email, r.stats); }).catch(function () {});
+    }
+    return statsReq.promise;
+  }
 
   function showError(err) {
     app.innerHTML =
@@ -91,16 +106,26 @@
   async function showHome(silent) {
     const seq = ++renderSeq;
     document.title = SITE;
-    if (!silent) loading();
+    statsReq = null;
+    // Paint the last-seen list right away; the fresh one replaces it when it arrives.
+    const cached = silent ? null : P.cache.get('home');
+    if (cached) renderHome(cached); else if (!silent) loading();
+    if (me().email) getStats(me().email); // fetch in parallel with the list
     let data;
     try {
       data = await P.api('listEvents');
     } catch (e) {
-      if (seq === renderSeq) showError(e);
+      if (seq === renderSeq && !cached) showError(e);
       return;
     }
     if (seq !== renderSeq) return;
+    P.cache.set('home', data);
+    if (cached && same(cached, data)) return;
+    if (cached && app.querySelector('form[data-dirty]')) return; // don't wipe what they're typing
+    renderHome(data);
+  }
 
+  function renderHome(data) {
     app.innerHTML =
       '<h2>' + t('upcoming') + '</h2>' +
       (data.events.length
@@ -174,14 +199,20 @@
       };
       return;
     }
-    box.innerHTML = '<div class="muted small">' + t('loadingStats') + '</div>';
-    P.api('stats', { email: email }).then(function (r) {
+    const paint = function (stats) {
       box.innerHTML =
-        (r.stats.name ? '<div><b>' + esc(r.stats.name) + '</b></div>' : '') +
-        statsHtml(r.stats) +
+        (stats.name ? '<div><b>' + esc(stats.name) + '</b></div>' : '') +
+        statsHtml(stats) +
         '<button class="linkish small" id="not-me">' + t('notYou') + '</button>';
       document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
+    };
+    const cachedStats = P.cache.get('stats.' + email);
+    if (cachedStats) paint(cachedStats);
+    else box.innerHTML = '<div class="muted small">' + t('loadingStats') + '</div>';
+    getStats(email).then(function (r) {
+      if (box.isConnected && !same(cachedStats, r.stats)) paint(r.stats);
     }).catch(function (e) {
+      if (!box.isConnected || cachedStats) return;
       box.innerHTML = '<div class="error-box small">' + esc(e.message) + '</div>' +
         '<button class="linkish small" id="not-me">' + t('useDifferent') + '</button>';
       document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
@@ -213,25 +244,59 @@
 
   /* ---------- event page ---------- */
 
+  // silent = refresh after an action or on returning to the tab: skip the cached paint.
   async function showEvent(id, silent) {
     const seq = ++renderSeq;
-    if (!silent) loading();
+    statsReq = null;
     const tokens = tokensFor(id);
+    const cacheKey = 'event.' + id;
+    let cached = silent ? null : P.cache.get(cacheKey);
+    if (cached && !same(cached.tokens, tokens)) cached = null; // signed up/dropped since: don't show a stale "you"
+    if (cached) renderEvent(cached.data); else if (!silent) loading();
+    if (me().email) getStats(me().email); // fetch in parallel with the game
     let data;
     try {
       data = await P.api('getEvent', { eventId: id, tokens: tokens });
     } catch (e) {
-      if (seq === renderSeq) showError(e);
+      if (seq === renderSeq && !cached) showError(e);
       return;
     }
-    if (seq !== renderSeq) return;
     // Forget signups that were dropped or removed by the admin.
     const live = data.mine.map(function (m) { return m.token; });
     if (tokens.some(function (t) { return live.indexOf(t) < 0; })) setTokens(id, live);
+    P.cache.set(cacheKey, { tokens: tokensFor(id), data: data });
+    if (seq !== renderSeq) return;
+    if (cached && same(cached.data, data)) return;
+    if (cached && app.querySelector('form[data-dirty]')) return; // don't wipe what they're typing
     renderEvent(data);
   }
 
+  // Show the result of an action immediately, before the server's fresh list comes back.
+  let lastEvent = null;
+  function applyLocal(fn) {
+    if (!lastEvent) return;
+    const d = JSON.parse(JSON.stringify(lastEvent));
+    fn(d);
+    const all = d.roster.concat(d.waitlist);
+    const cap = d.event.cap;
+    d.roster = all.slice(0, cap);
+    d.waitlist = all.slice(cap);
+    d.event.total = all.length;
+    d.event.filled = Math.min(all.length, cap);
+    d.event.waitlist = Math.max(0, all.length - cap);
+    d.mine = d.mine.map(function (m) {
+      const i = all.findIndex(function (p) { return p.name.toLowerCase() === m.name.toLowerCase(); });
+      return Object.assign(m, { position: i + 1, onRoster: i < cap, waitlistPosition: i < cap ? 0 : i - cap + 1 });
+    }).filter(function (m) { return m.position > 0; });
+    P.cache.set('event.' + d.event.id, { tokens: tokensFor(d.event.id), data: d });
+    renderEvent(d);
+  }
+  function withoutName(list, name) {
+    return list.filter(function (p) { return p.name.toLowerCase() !== name.toLowerCase(); });
+  }
+
   function renderEvent(data) {
+    lastEvent = data;
     const ev = data.event;
     const mine = data.mine;
     document.title = P.fmtDate(ev.date) + ' · ' + SITE;
@@ -374,6 +439,10 @@
             const r = await P.api('signup', { eventId: ev.id, name: name, email: email, family: !!isFamily });
             addToken(ev.id, r.token);
             setMe(isFamily ? { email: email.toLowerCase() } : { name: name, email: email.toLowerCase() });
+            applyLocal(function (d) {
+              d.waitlist.push({ name: name });
+              d.mine.push({ token: r.token, name: name });
+            });
             P.toast(r.onRoster
               ? (isFamily ? t('toastInThem', { name: name, n: r.position }) : t('toastInYou', { n: r.position }))
               : t('toastWait', { n: r.position - ev.cap }));
@@ -427,6 +496,12 @@
           try {
             await P.api('rename', { eventId: ev.id, token: token, name: name });
             if ((me().name || '').toLowerCase() === m.name.toLowerCase()) setMe({ name: name });
+            applyLocal(function (d) {
+              const swap = function (p) { return p.name.toLowerCase() === m.name.toLowerCase() ? { name: name } : p; };
+              d.roster = d.roster.map(swap);
+              d.waitlist = d.waitlist.map(swap);
+              d.mine.forEach(function (x) { if (x.token === token) x.name = name; });
+            });
             P.toast(t('nameUpdated'));
             showEvent(ev.id, true);
           } catch (err) {
@@ -440,6 +515,11 @@
           try {
             await P.api('drop', { eventId: ev.id, token: token });
             removeToken(ev.id, token);
+            applyLocal(function (d) {
+              d.roster = withoutName(d.roster, m.name);
+              d.waitlist = withoutName(d.waitlist, m.name);
+              d.mine = d.mine.filter(function (x) { return x.token !== token; });
+            });
             P.toast(t('dropped', { name: m.name }));
             showEvent(ev.id, true);
           } catch (err) {
@@ -451,10 +531,13 @@
 
     const statsBox = document.getElementById('my-stats');
     if (statsBox) {
-      const req = me().email ? { email: me().email } : { token: mine[0].token };
-      P.api('stats', req).then(function (r) {
-        statsBox.innerHTML = '<div><b>' + t('yourStats') + '</b></div>' + statsHtml(r.stats);
-      }).catch(function () { statsBox.remove(); });
+      const email = me().email;
+      const paint = function (stats) { statsBox.innerHTML = '<div><b>' + t('yourStats') + '</b></div>' + statsHtml(stats); };
+      const cachedStats = email && P.cache.get('stats.' + email);
+      if (cachedStats) paint(cachedStats);
+      (email ? getStats(email) : P.api('stats', { token: mine[0].token })).then(function (r) {
+        if (statsBox.isConnected) paint(r.stats);
+      }).catch(function () { if (!cachedStats) statsBox.remove(); });
     }
   }
 

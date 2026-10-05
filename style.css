@@ -248,6 +248,20 @@ details.find summary { cursor: pointer; color: var(--jade-700); font-weight: 600
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .btn { flex: 1 1 160px; }
 
+/* ---------- Skeleton loading ---------- */
+.skeleton {
+  border-radius: var(--radius);
+  background: linear-gradient(90deg, #efe6d3 25%, #f7f0e2 50%, #efe6d3 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s ease-in-out infinite;
+  margin-bottom: 12px;
+}
+.sk-title { height: 22px; width: 50%; margin: 4px 0 14px; border-radius: 8px; }
+.sk-card { height: 96px; }
+@keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
 /* ---------- Toast & loading ---------- */
 .toast {
   position: fixed;
