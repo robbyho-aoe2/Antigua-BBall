@@ -192,7 +192,7 @@ function stats(req) {
   if (!email) fail_('Enter your email to see your stats.');
   const all = computeStats_(readEvents_(), signups);
   const p = all[email] || emptyStats_();
-  return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds } };
+  return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters } };
 }
 
 /* ------------------------------------------------------------------ */
@@ -347,7 +347,7 @@ function adminMoveSignup(req) {
 /* ------------------------------------------------------------------ */
 
 function emptyStats_() {
-  return { name: '', games: 0, streak: 0, bestStreak: 0, earlyBirds: 0 };
+  return { name: '', games: 0, streak: 0, bestStreak: 0, earlyBirds: 0, buzzerBeaters: 0 };
 }
 
 /**
@@ -355,6 +355,7 @@ function emptyStats_() {
  * - games: past games where they made the roster
  * - streak: consecutive past games on the roster (being waitlisted doesn't break it, skipping a game does)
  * - earlyBirds: times they were first to sign up
+ * - buzzerBeaters: times they got the last roster spot (e.g. #15 of 15)
  */
 function computeStats_(events, signups) {
   const today = today_();
@@ -377,6 +378,7 @@ function computeStats_(events, signups) {
       }
     });
     if (list.length && list[0].email) get(list[0].email).earlyBirds++;
+    if (list.length >= ev.cap && list[ev.cap - 1].email) get(list[ev.cap - 1].email).buzzerBeaters++;
     return status;
   });
 

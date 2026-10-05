@@ -17,6 +17,7 @@
     { icon: '🔥', name: t('badgeOnFire'), hint: t('hintInARow', { n: 3 }), test: function (s) { return s.bestStreak >= 3; } },
     { icon: '💪', name: t('badgeIronMan'), hint: t('hintInARow', { n: 10 }), test: function (s) { return s.bestStreak >= 10; } },
     { icon: '🐦', name: t('badgeEarlyBird'), hint: t('hintFirst'), test: function (s) { return s.earlyBirds >= 1; } },
+    { icon: '🚨', name: t('badgeBuzzer'), hint: t('hintBuzzer'), test: function (s) { return s.buzzerBeaters >= 1; } },
   ];
 
   let renderSeq = 0;
