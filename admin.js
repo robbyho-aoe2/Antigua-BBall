@@ -6,6 +6,7 @@
   const app = document.getElementById('app');
   const PW_KEY = 'pickup.adminpw';
 
+  P.useLang('en'); // admin page is English-only
   P.applyBranding();
 
   let password = '';

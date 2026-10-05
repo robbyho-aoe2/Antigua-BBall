@@ -63,7 +63,7 @@ In this repo, edit [`config.js`](config.js). You can do it right on GitHub: open
 API_URL: 'https://script.google.com/macros/s/AKfy.../exec',
 ```
 
-While you're there, you can also change `SITE_NAME` and `TAGLINE`.
+While you're there, you can also change `SITE_NAME`, `TAGLINE` and `TAGLINE_ES` (the Spanish tagline).
 
 ### 6. Turn on GitHub Pages
 
@@ -107,6 +107,14 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
 - **Waitlist:** if someone on the roster drops, the first person on the waitlist moves up automatically.
 - **Closed signups:** you can still see the roster, and players can still drop out.
 - **Past games** disappear from the main page the day after. The direct link still shows the final list.
+
+### Language (English / Español)
+
+- On the first visit, the player page uses the phone's language: Spanish phones get Spanish, everything else gets English.
+- The **Español / English** button in the header switches language. The choice is remembered on that phone.
+- All player-facing wording lives in [`i18n.js`](i18n.js), so you can tweak the Spanish (or English) there.
+- Game **notes** and **location** show exactly as you type them, so write them bilingually if you like (e.g. "Bring a white and a dark shirt / Trae camisa blanca y oscura").
+- The admin page stays in English.
 
 ### Stats and badges
 
@@ -166,7 +174,8 @@ The Sheet is meant to be readable and editable by hand:
 |---|---|
 | `index.html`, `app.js` | Player page |
 | `admin.html`, `admin.js` | Admin page |
-| `common.js` | Shared helpers (talking to the server, formatting) |
+| `common.js` | Shared helpers (talking to the server, formatting, language) |
+| `i18n.js` | All player-facing text in English and Spanish |
 | `style.css` | Panza Verde colors: jade green, Antigua arch yellow, terracotta, cream |
 | `config.js` | **The one file you edit:** your Apps Script URL and site name |
 | `apps-script/Code.gs` | The server code you paste into the Sheet |

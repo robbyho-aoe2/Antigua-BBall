@@ -2,19 +2,21 @@
 (function () {
   const P = window.Pickup;
   const esc = P.esc;
+  const t = P.t;
+  const tn = P.tn;
   const app = document.getElementById('app');
   const SITE = (window.APP_CONFIG && window.APP_CONFIG.SITE_NAME) || 'Pickup';
   const TOKENS_KEY = 'pickup.tokens'; // { eventId: [token, ...] }
   const ME_KEY = 'pickup.me';         // { name, email } to prefill the form and load stats
 
   const BADGES = [
-    { icon: '🏀', name: 'Rookie', games: 1 },
-    { icon: '⭐', name: 'Regular', games: 10 },
-    { icon: '🏅', name: 'Veteran', games: 25 },
-    { icon: '👑', name: 'Legend', games: 50 },
-    { icon: '🔥', name: 'On Fire', hint: '3 games in a row', test: function (s) { return s.bestStreak >= 3; } },
-    { icon: '💪', name: 'Iron Man', hint: '10 games in a row', test: function (s) { return s.bestStreak >= 10; } },
-    { icon: '🐦', name: 'Early Bird', hint: 'First to sign up', test: function (s) { return s.earlyBirds >= 1; } },
+    { icon: '🏀', name: t('badgeRookie'), games: 1 },
+    { icon: '⭐', name: t('badgeRegular'), games: 10 },
+    { icon: '🏅', name: t('badgeVeteran'), games: 25 },
+    { icon: '👑', name: t('badgeLegend'), games: 50 },
+    { icon: '🔥', name: t('badgeOnFire'), hint: t('hintInARow', { n: 3 }), test: function (s) { return s.bestStreak >= 3; } },
+    { icon: '💪', name: t('badgeIronMan'), hint: t('hintInARow', { n: 10 }), test: function (s) { return s.bestStreak >= 10; } },
+    { icon: '🐦', name: t('badgeEarlyBird'), hint: t('hintFirst'), test: function (s) { return s.earlyBirds >= 1; } },
   ];
 
   let renderSeq = 0;
@@ -74,13 +76,13 @@
     if (document.visibilityState === 'visible' && !app.querySelector('form[data-dirty]')) route(true);
   });
 
-  function loading() { app.innerHTML = '<div class="loading">Loading…</div>'; }
+  function loading() { app.innerHTML = '<div class="loading">' + t('loading') + '</div>'; }
 
   function showError(err) {
     app.innerHTML =
       '<div class="error-box">' + esc(err.message) + '</div>' +
-      '<div class="btn-row"><button class="btn" id="retry">Try again</button>' +
-      (eventIdFromUrl() ? '<a class="btn" href="./" data-nav>All games</a>' : '') + '</div>';
+      '<div class="btn-row"><button class="btn" id="retry">' + t('tryAgain') + '</button>' +
+      (eventIdFromUrl() ? '<a class="btn" href="./" data-nav>' + t('allGames') + '</a>' : '') + '</div>';
     document.getElementById('retry').onclick = function () { route(); };
   }
 
@@ -100,11 +102,11 @@
     if (seq !== renderSeq) return;
 
     app.innerHTML =
-      '<h2>Upcoming games</h2>' +
+      '<h2>' + t('upcoming') + '</h2>' +
       (data.events.length
         ? data.events.map(eventCard).join('')
-        : '<div class="card muted">No games scheduled yet. Check back soon!</div>') +
-      '<h2>Your stats</h2><div class="card" id="stats-box"></div>' +
+        : '<div class="card muted">' + t('noGames') + '</div>') +
+      '<h2>' + t('yourStats') + '</h2><div class="card" id="stats-box"></div>' +
       leadersHtml(data.leaders);
     renderStatsBox();
   }
@@ -116,19 +118,19 @@
     return (
       '<a class="card event-card" data-nav href="?event=' + encodeURIComponent(ev.id) + '">' +
         '<div class="date-badge">' +
-          '<span class="dow">' + d.toLocaleDateString('en-US', { weekday: 'short' }).toUpperCase() + '</span>' +
+          '<span class="dow">' + d.toLocaleDateString(P.locale(), { weekday: 'short' }).replace('.', '').toUpperCase() + '</span>' +
           '<span class="day">' + d.getDate() + '</span>' +
-          '<span class="mon">' + d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase() + '</span>' +
+          '<span class="mon">' + d.toLocaleDateString(P.locale(), { month: 'short' }).replace('.', '').toUpperCase() + '</span>' +
         '</div>' +
         '<div class="ec-body">' +
           '<div class="ec-title">' + esc(P.fmtTime(ev.time)) + '</div>' +
           '<div class="ec-loc">' + esc(ev.location) + '</div>' +
           '<div class="meter' + (ev.filled >= ev.cap ? ' full' : '') + '"><span style="width:' + pct + '%"></span></div>' +
           '<div class="ec-meta">' +
-            '<span><span class="count">' + ev.filled + '/' + ev.cap + '</span> in</span>' +
-            (ev.waitlist ? '<span class="pill wait">' + ev.waitlist + ' waitlist</span>' : '') +
-            (!ev.open ? '<span class="pill closed">Closed</span>' : '') +
-            (mine ? '<span class="pill me">✓ Signed up</span>' : '') +
+            '<span><span class="count">' + ev.filled + '/' + ev.cap + '</span> ' + t('inCount') + '</span>' +
+            (ev.waitlist ? '<span class="pill wait">' + t('waitlistCount', { n: ev.waitlist }) + '</span>' : '') +
+            (!ev.open ? '<span class="pill closed">' + t('closed') + '</span>' : '') +
+            (mine ? '<span class="pill me">' + t('signedUpPill') + '</span>' : '') +
           '</div>' +
         '</div>' +
         '<span class="chev" aria-hidden="true">›</span>' +
@@ -139,14 +141,14 @@
   function leadersHtml(leaders) {
     if (!leaders || !leaders.length) return '';
     return (
-      '<h2>🏆 Regulars</h2>' +
+      '<h2>' + t('regulars') + '</h2>' +
       '<ol class="names leaders">' +
       leaders.map(function (p, i) {
         return '<li><span class="n">' + (i + 1) + '</span><span>' + esc(p.name) + '</span>' +
-          '<span class="g">' + p.games + ' game' + (p.games === 1 ? '' : 's') + '</span>' +
+          '<span class="g">' + tn('game', p.games) + '</span>' +
           '<span class="s">' + (p.streak >= 2 ? '🔥' + p.streak : '') + '</span></li>';
       }).join('') +
-      '</ol><p class="hint">Games played on the roster. 🔥 = current streak.</p>'
+      '</ol><p class="hint">' + t('leadersHint') + '</p>'
     );
   }
 
@@ -159,9 +161,9 @@
     if (!email) {
       box.innerHTML =
         '<form id="stats-form">' +
-          '<label for="st-email">See your games, streaks and badges</label>' +
+          '<label for="st-email">' + t('statsPrompt') + '</label>' +
           '<input id="st-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>' +
-          '<button class="btn primary block" type="submit">Show my stats</button>' +
+          '<button class="btn primary block" type="submit">' + t('showStats') + '</button>' +
         '</form>';
       document.getElementById('stats-form').onsubmit = function (e) {
         e.preventDefault();
@@ -172,16 +174,16 @@
       };
       return;
     }
-    box.innerHTML = '<div class="muted small">Loading your stats…</div>';
+    box.innerHTML = '<div class="muted small">' + t('loadingStats') + '</div>';
     P.api('stats', { email: email }).then(function (r) {
       box.innerHTML =
         (r.stats.name ? '<div><b>' + esc(r.stats.name) + '</b></div>' : '') +
         statsHtml(r.stats) +
-        '<button class="linkish small" id="not-me">Not you? Use a different email</button>';
+        '<button class="linkish small" id="not-me">' + t('notYou') + '</button>';
       document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
     }).catch(function (e) {
       box.innerHTML = '<div class="error-box small">' + esc(e.message) + '</div>' +
-        '<button class="linkish small" id="not-me">Use a different email</button>';
+        '<button class="linkish small" id="not-me">' + t('useDifferent') + '</button>';
       document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
     });
   }
@@ -191,21 +193,20 @@
     const next = BADGES.find(function (b) { return b.games && s.games < b.games; });
     return (
       '<div class="stats-grid">' +
-        '<div class="stat"><b>' + s.games + '</b><span>Games</span></div>' +
-        '<div class="stat"><b>' + (s.streak ? '🔥' + s.streak : '0') + '</b><span>Streak</span></div>' +
-        '<div class="stat"><b>' + s.bestStreak + '</b><span>Best</span></div>' +
-        '<div class="stat"><b>' + s.earlyBirds + '</b><span>First in</span></div>' +
+        '<div class="stat"><b>' + s.games + '</b><span>' + t('statGames') + '</span></div>' +
+        '<div class="stat"><b>' + (s.streak ? '🔥' + s.streak : '0') + '</b><span>' + t('statStreak') + '</span></div>' +
+        '<div class="stat"><b>' + s.bestStreak + '</b><span>' + t('statBest') + '</span></div>' +
+        '<div class="stat"><b>' + s.earlyBirds + '</b><span>' + t('statFirst') + '</span></div>' +
       '</div>' +
       '<div class="badges">' +
         BADGES.map(function (b) {
           const has = earned.indexOf(b) >= 0;
-          const title = b.hint || (b.games + ' game' + (b.games === 1 ? '' : 's'));
+          const title = b.hint || tn('game', b.games);
           return '<span class="badge' + (has ? '' : ' locked') + '" title="' + esc(title) + '">' + b.icon + ' ' + b.name + '</span>';
         }).join('') +
       '</div>' +
       (next
-        ? '<div class="next-goal">' + (next.games - s.games) + ' more game' + (next.games - s.games === 1 ? '' : 's') +
-          ' to ' + next.icon + ' ' + next.name + '</div>'
+        ? '<div class="next-goal">' + esc(tn('nextGoal', next.games - s.games, { badge: next.icon + ' ' + next.name })) + '</div>'
         : '')
     );
   }
@@ -235,33 +236,33 @@
     const mine = data.mine;
     document.title = P.fmtDate(ev.date) + ' · ' + SITE;
 
-    const pill = ev.past ? '<span class="pill past">Finished</span>'
-      : !ev.open ? '<span class="pill closed">Signups closed</span>'
-      : ev.filled >= ev.cap ? '<span class="pill wait">Full · waitlist open</span>'
-      : '<span class="pill">' + (ev.cap - ev.filled) + ' spot' + (ev.cap - ev.filled === 1 ? '' : 's') + ' left</span>';
+    const pill = ev.past ? '<span class="pill past">' + t('pillFinished') + '</span>'
+      : !ev.open ? '<span class="pill closed">' + t('pillClosed') + '</span>'
+      : ev.filled >= ev.cap ? '<span class="pill wait">' + t('pillFull') + '</span>'
+      : '<span class="pill">' + tn('spotsLeft', ev.cap - ev.filled) + '</span>';
 
     let html =
-      '<a class="back" href="./" data-nav>← All games</a>' +
+      '<a class="back" href="./" data-nav>' + t('backAllGames') + '</a>' +
       '<div class="card event-head">' +
         '<h2>' + esc(P.fmtDate(ev.date, { weekday: 'long', month: 'long', day: 'numeric' })) + '</h2>' +
         '<div class="when">' + esc(P.fmtTime(ev.time)) + '</div>' +
         '<div class="where">📍 <a href="https://www.google.com/maps/search/?api=1&query=' +
           encodeURIComponent(ev.location) + '" target="_blank" rel="noopener">' + esc(ev.location) + '</a></div>' +
         (ev.notes ? '<div class="notes">' + esc(ev.notes) + '</div>' : '') +
-        '<div class="row">' + pill + '<button class="btn sm" id="share-btn">Share link</button></div>' +
+        '<div class="row">' + pill + '<button class="btn sm" id="share-btn">' + t('share') + '</button></div>' +
       '</div>';
 
-    if (ev.past) html += '<div class="banner">This game already happened. Here\'s the final list.</div>';
+    if (ev.past) html += '<div class="banner">' + t('pastBanner') + '</div>';
 
     mine.forEach(function (m) { html += meCard(ev, m, mine.length); });
 
     if (!ev.past) {
       if (!ev.open) {
-        if (!mine.length) html += '<div class="banner">Signups are closed for this game.</div>';
+        if (!mine.length) html += '<div class="banner">' + t('closedBanner') + '</div>';
       } else if (!mine.length) {
         html += signupForm(ev, false);
       } else if (mine.length < 2) {
-        html += '<details class="find"><summary>+ Sign up a family member</summary>' + signupForm(ev, true) + '</details>';
+        html += '<details class="find"><summary>' + t('addFamily') + '</summary>' + signupForm(ev, true) + '</details>';
       }
       if (!mine.length) html += findSpotHtml();
     }
@@ -274,25 +275,24 @@
   }
 
   function meCard(ev, m, count) {
-    const title = count > 1 ? esc(m.name) + ' – #' + m.position : 'You\'re signed up – #' + m.position;
+    const title = count > 1 ? esc(m.name) + ' – #' + m.position : t('youreSignedUp', { n: m.position });
     const sub = m.onRoster
-      ? 'On the roster as <b>' + esc(m.name) + '</b> ✅'
-      : '#' + m.waitlistPosition + ' on the waitlist as <b>' + esc(m.name) +
-        '</b>. You\'ll move up automatically if someone drops.';
+      ? t('onRosterAs', { name: esc(m.name) })
+      : t('onWaitlistAs', { n: m.waitlistPosition, name: esc(m.name) });
     return (
       '<div class="card me-card' + (m.onRoster ? '' : ' waitlisted') + '" data-token="' + esc(m.token) + '">' +
         '<div class="big">' + title + '</div>' +
         '<div class="small">' + sub + '</div>' +
         (ev.past ? '' :
           '<div class="btn-row">' +
-            '<button class="btn" data-act="edit">Edit name</button>' +
-            '<button class="btn danger" data-act="drop">Drop out</button>' +
+            '<button class="btn" data-act="edit">' + t('editName') + '</button>' +
+            '<button class="btn danger" data-act="drop">' + t('dropOut') + '</button>' +
           '</div>' +
           '<form class="hidden" data-act="rename-form">' +
-            '<label>New name</label>' +
+            '<label>' + t('newName') + '</label>' +
             '<input name="name" type="text" maxlength="40" autocomplete="name" value="' + esc(m.name) + '" required>' +
-            '<div class="btn-row"><button class="btn primary" type="submit">Save</button>' +
-            '<button class="btn" type="button" data-act="cancel">Cancel</button></div>' +
+            '<div class="btn-row"><button class="btn primary" type="submit">' + t('save') + '</button>' +
+            '<button class="btn" type="button" data-act="cancel">' + t('cancel') + '</button></div>' +
           '</form>') +
       '</div>'
     );
@@ -303,28 +303,28 @@
     const full = ev.filled >= ev.cap;
     return (
       '<form class="card" data-act="signup"' + (family ? ' data-family="1"' : '') + ' novalidate>' +
-        '<label for="su-name' + (family ? '-f' : '') + '">' + (family ? 'Their name' : 'Your name') + '</label>' +
+        '<label for="su-name' + (family ? '-f' : '') + '">' + (family ? t('theirName') : t('yourName')) + '</label>' +
         '<input id="su-name' + (family ? '-f' : '') + '" name="name" type="text" maxlength="40" autocomplete="' + (family ? 'off' : 'name') + '" required value="' + (family ? '' : esc(m.name || '')) + '">' +
-        '<label for="su-email' + (family ? '-f' : '') + '">' + (family ? 'Your email' : 'Email') + '</label>' +
+        '<label for="su-email' + (family ? '-f' : '') + '">' + (family ? t('yourEmail') : t('email')) + '</label>' +
         '<input id="su-email' + (family ? '-f' : '') + '" name="email" type="email" inputmode="email" autocomplete="email" maxlength="100" required value="' + esc(m.email || '') + '">' +
-        '<p class="hint">Only used to edit your spot and track your stats. Never shown to other players.</p>' +
+        '<p class="hint">' + t('emailHint') + '</p>' +
         (family ? '' :
-          '<label class="check"><input type="checkbox" name="family"><span>I\'m signing up a family member (e.g. my kid) with my email</span></label>') +
-        '<button class="btn primary block" type="submit">' + (full ? 'Join the waitlist' : (family ? 'Sign them up' : 'Sign me up')) + '</button>' +
-        (full ? '<p class="hint">The roster is full. You\'ll move up automatically if someone drops.</p>' : '') +
+          '<label class="check"><input type="checkbox" name="family"><span>' + t('familyCheck') + '</span></label>') +
+        '<button class="btn primary block" type="submit">' + (full ? t('joinWaitlist') : (family ? t('signThemUp') : t('signMeUp'))) + '</button>' +
+        (full ? '<p class="hint">' + t('fullHint') + '</p>' : '') +
       '</form>'
     );
   }
 
   function findSpotHtml() {
     return (
-      '<details class="find"><summary>Already signed up on another phone?</summary>' +
+      '<details class="find"><summary>' + t('otherPhone') + '</summary>' +
         '<form class="card" data-act="find" novalidate>' +
-          '<label for="fs-name">Name you signed up with</label>' +
+          '<label for="fs-name">' + t('nameSignedUpWith') + '</label>' +
           '<input id="fs-name" name="name" type="text" maxlength="40" autocomplete="name" required value="' + esc(me().name || '') + '">' +
-          '<label for="fs-email">Email</label>' +
+          '<label for="fs-email">' + t('email') + '</label>' +
           '<input id="fs-email" name="email" type="email" inputmode="email" autocomplete="email" required value="' + esc(me().email || '') + '">' +
-          '<button class="btn block" type="submit">Find my spot</button>' +
+          '<button class="btn block" type="submit">' + t('findSpot') + '</button>' +
         '</form>' +
       '</details>'
     );
@@ -334,15 +334,15 @@
     const myNames = mine.map(function (m) { return m.name.toLowerCase(); });
     const item = function (p, i) {
       const isMe = myNames.indexOf(p.name.toLowerCase()) >= 0;
-      return '<li' + (isMe ? ' class="is-me"' : '') + '><span class="n">' + (i + 1) + '</span><span>' + esc(p.name) + (isMe ? ' (you)' : '') + '</span></li>';
+      return '<li' + (isMe ? ' class="is-me"' : '') + '><span class="n">' + (i + 1) + '</span><span>' + esc(p.name) + (isMe ? ' ' + t('you') : '') + '</span></li>';
     };
     let html =
-      '<section class="list-section"><h3>Roster <span class="count">' + ev.filled + '/' + ev.cap + '</span></h3>' +
+      '<section class="list-section"><h3>' + t('roster') + ' <span class="count">' + ev.filled + '/' + ev.cap + '</span></h3>' +
       '<ol class="names">' +
-      (data.roster.length ? data.roster.map(item).join('') : '<li class="empty">No one yet. Be the first!</li>') +
+      (data.roster.length ? data.roster.map(item).join('') : '<li class="empty">' + t('noOneYet') + '</li>') +
       '</ol></section>';
     if (data.waitlist.length) {
-      html += '<section class="list-section"><h3>Waitlist <span class="count">' + data.waitlist.length + '</span></h3>' +
+      html += '<section class="list-section"><h3>' + t('waitlist') + ' <span class="count">' + data.waitlist.length + '</span></h3>' +
         '<ol class="names wait">' + data.waitlist.map(item).join('') + '</ol></section>';
     }
     return html;
@@ -367,16 +367,16 @@
         const isFamily = family || (box && box.checked);
         const name = field(form, 'name').value.trim();
         const email = field(form, 'email').value.trim();
-        if (!name) return P.toast('Enter a name.', true);
-        if (!email) return P.toast('Enter your email.', true);
+        if (!name) return P.toast(t('enterName'), true);
+        if (!email) return P.toast(t('enterEmail'), true);
         P.busy(form.querySelector('button[type=submit]'), async function () {
           try {
             const r = await P.api('signup', { eventId: ev.id, name: name, email: email, family: !!isFamily });
             addToken(ev.id, r.token);
             setMe(isFamily ? { email: email.toLowerCase() } : { name: name, email: email.toLowerCase() });
             P.toast(r.onRoster
-              ? (isFamily ? name + ' is in' : 'You\'re in') + '! #' + r.position + ' on the roster.'
-              : 'Roster\'s full. Waitlist #' + (r.position - ev.cap) + '.');
+              ? (isFamily ? t('toastInThem', { name: name, n: r.position }) : t('toastInYou', { n: r.position }))
+              : t('toastWait', { n: r.position - ev.cap }));
             showEvent(ev.id, true);
           } catch (err) {
             P.toast(err.message, true);
@@ -394,7 +394,7 @@
             const r = await P.api('findSpot', { eventId: ev.id, name: field(find, 'name').value, email: field(find, 'email').value });
             addToken(ev.id, r.token);
             setMe({ name: field(find, 'name').value.trim(), email: field(find, 'email').value.trim().toLowerCase() });
-            P.toast('Found you!');
+            P.toast(t('foundYou'));
             showEvent(ev.id, true);
           } catch (err) {
             P.toast(err.message, true);
@@ -422,12 +422,12 @@
       form.onsubmit = function (e) {
         e.preventDefault();
         const name = field(form, 'name').value.trim();
-        if (!name) return P.toast('Enter a name.', true);
+        if (!name) return P.toast(t('enterName'), true);
         P.busy(form.querySelector('button[type=submit]'), async function () {
           try {
             await P.api('rename', { eventId: ev.id, token: token, name: name });
             if ((me().name || '').toLowerCase() === m.name.toLowerCase()) setMe({ name: name });
-            P.toast('Name updated.');
+            P.toast(t('nameUpdated'));
             showEvent(ev.id, true);
           } catch (err) {
             P.toast(err.message, true);
@@ -435,12 +435,12 @@
         });
       };
       card.querySelector('[data-act="drop"]').onclick = function (e) {
-        if (!confirm('Drop ' + m.name + ' from this game?' + (m.onRoster ? ' The next person on the waitlist will take the spot.' : ''))) return;
+        if (!confirm(t('confirmDrop', { name: m.name }) + (m.onRoster ? t('confirmDropRoster') : ''))) return;
         P.busy(e.currentTarget, async function () {
           try {
             await P.api('drop', { eventId: ev.id, token: token });
             removeToken(ev.id, token);
-            P.toast(m.name + ' dropped. Thanks for freeing up the spot!');
+            P.toast(t('dropped', { name: m.name }));
             showEvent(ev.id, true);
           } catch (err) {
             P.toast(err.message, true);
@@ -453,23 +453,23 @@
     if (statsBox) {
       const req = me().email ? { email: me().email } : { token: mine[0].token };
       P.api('stats', req).then(function (r) {
-        statsBox.innerHTML = '<div><b>Your stats</b></div>' + statsHtml(r.stats);
+        statsBox.innerHTML = '<div><b>' + t('yourStats') + '</b></div>' + statsHtml(r.stats);
       }).catch(function () { statsBox.remove(); });
     }
   }
 
   async function share(ev) {
     const url = location.origin + location.pathname + '?event=' + encodeURIComponent(ev.id);
-    const text = 'Hoops ' + P.fmtDate(ev.date) + ' ' + P.fmtTime(ev.time) + ' @ ' + ev.location + '. Sign up:';
+    const text = t('shareText', { date: P.fmtDate(ev.date), time: P.fmtTime(ev.time), loc: ev.location });
     if (navigator.share) {
       try { await navigator.share({ title: SITE, text: text, url: url }); } catch (e) { /* cancelled */ }
       return;
     }
     try {
       await navigator.clipboard.writeText(text + ' ' + url);
-      P.toast('Link copied. Paste it in the group chat!');
+      P.toast(t('linkCopied'));
     } catch (e) {
-      prompt('Copy this link:', url);
+      prompt(t('copyLink'), url);
     }
   }
 

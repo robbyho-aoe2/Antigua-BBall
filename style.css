@@ -52,6 +52,21 @@ a { color: var(--jade-700); }
 .site-header h1 { margin: 0; font-size: 22px; letter-spacing: .2px; }
 .site-header .tagline { margin: 2px 0 0; font-size: 13px; color: var(--ochre-100); opacity: .9; }
 .arch { flex: none; width: 44px; height: 44px; }
+.lang-toggle {
+  margin-left: auto;
+  flex: none;
+  min-height: 40px;
+  padding: 6px 14px;
+  border-radius: 99px;
+  border: 1.5px solid var(--ochre);
+  background: transparent;
+  color: var(--ochre-100);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+}
+.lang-toggle:active { background: rgba(226, 167, 46, .2); }
 .header-link { margin-left: auto; font-size: 14px; color: var(--ochre-100) !important; }
 
 main {

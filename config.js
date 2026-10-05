@@ -6,4 +6,5 @@ window.APP_CONFIG = {
   // Shown at the top of the page and in the browser tab.
   SITE_NAME: 'Antigua Pickup',
   TAGLINE: 'Pickup basketball · Antigua Guatemala',
+  TAGLINE_ES: 'Básquet · Antigua Guatemala',
 };
