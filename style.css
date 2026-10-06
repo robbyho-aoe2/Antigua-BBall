@@ -179,6 +179,7 @@ ol.names .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-sp
 .install-body { flex: 1; min-width: 0; }
 .install-body .btn-row { margin-top: 8px; }
 .install-body .btn-row .btn { flex: 0 0 auto; }
+.email-why { margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--jade-100); color: var(--jade-900); font-size: 13px; line-height: 1.4; }
 .wait-rule { margin: 0 0 8px; padding: 8px 12px; border-radius: 10px; background: var(--ochre-100); border: 1px solid #f0d89c; color: #6e4a00; font-size: 14px; font-weight: 600; }
 ol.names li.divider { background: var(--ochre-100); color: #8a5d00; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; min-height: 0; padding: 6px 14px; }
 

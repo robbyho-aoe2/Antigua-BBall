@@ -406,8 +406,8 @@
         '<label for="su-name' + (family ? '-f' : '') + '">' + (family ? t('theirName') : t('yourName')) + '</label>' +
         '<input id="su-name' + (family ? '-f' : '') + '" name="name" type="text" maxlength="40" autocomplete="' + (family ? 'off' : 'name') + '" required value="' + (family ? '' : esc(m.name || '')) + '">' +
         '<label for="su-email' + (family ? '-f' : '') + '">' + (family ? t('yourEmail') : t('email')) + '</label>' +
+        '<p class="email-why">' + t('emailWhy') + '</p>' +
         '<input id="su-email' + (family ? '-f' : '') + '" name="email" type="email" inputmode="email" autocomplete="email" maxlength="100" required value="' + esc(m.email || '') + '">' +
-        '<p class="hint">' + t('emailHint') + '</p>' +
         (family ? '' :
           '<label class="check"><input type="checkbox" name="family"><span>' + t('familyCheck') + '</span></label>') +
         '<button class="btn primary block" type="submit">' + (full ? t('joinWaitlist') : (family ? t('signThemUp') : t('signMeUp'))) + '</button>' +
