@@ -417,6 +417,7 @@
       '</section>';
     if (data.waitlist.length) {
       html += '<section class="list-section"><h3>' + t('waitlist') + ' <span class="count">' + data.waitlist.length + '</span></h3>' +
+        '<p class="wait-rule">⚠️ ' + esc(t('waitRule', { cap: ev.cap })) + '</p>' +
         cols(data.waitlist, 'wait') + '</section>';
     }
     return html;
