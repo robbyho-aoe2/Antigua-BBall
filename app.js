@@ -417,7 +417,10 @@
         '<label for="su-email' + sfx + '">' + t('emailOptional') + '</label>' +
         '<p class="email-why">' + t('emailWhy') + '</p>' +
         '<input id="su-email' + sfx + '" name="email" type="email" inputmode="email" autocomplete="email" maxlength="100" value="' + esc(m.email || '') + '">' +
-        '<label class="check notify-check"><input type="checkbox" name="notify" checked><span>' + t('notifyCheck') + '</span></label>' +
+        // Asked once: after a player chooses, the choice is remembered (and changed from their card).
+        (other || typeof m.notify !== 'boolean'
+          ? '<label class="check notify-check"><input type="checkbox" name="notify" checked><span>' + t('notifyCheck') + '</span></label>'
+          : '') +
         '<button class="btn primary block" type="submit">' + (full ? t('joinWaitlist') : (other ? t('signThemUp') : t('signMeUp'))) + '</button>' +
         (full ? '<p class="hint">' + t('fullHint') + '</p>' : '') +
       '</form>'
@@ -476,15 +479,23 @@
         if (name.split(' ').length < 2) return P.toast(t('fullNameNeeded'), true);
         P.busy(form.querySelector('button[type=submit]'), async function () {
           try {
-            const notify = field(form, 'notify').checked;
-            const r = await P.api('signup', { eventId: ev.id, name: name, email: email, lang: P.lang(), notify: notify });
+            const box = field(form, 'notify');
+            const payload = { eventId: ev.id, name: name, email: email, lang: P.lang() };
+            if (box) payload.notify = box.checked;
+            const r = await P.api('signup', payload);
             addToken(ev.id, r.token);
-            // Remember who "me" is (for stats and prefill) only from your own signup.
-            if (!other) setMe({ name: name, email: email.toLowerCase() });
-            else if (email && !me().email) setMe({ email: email.toLowerCase() });
+            // Remember who "me" is (for stats, prefill and the email choice) only from your own signup.
+            if (!other) {
+              const saved = { name: name, email: email.toLowerCase() };
+              if (typeof r.notify === 'boolean') saved.notify = r.notify;
+              else if (box) saved.notify = box.checked;
+              setMe(saved);
+            }
+            const hasEmail = typeof r.hasEmail === 'boolean' ? r.hasEmail : !!email;
+            const notify = typeof r.notify === 'boolean' ? r.notify : (box ? box.checked : true);
             applyLocal(function (d) {
               d.waitlist.push({ name: name });
-              d.mine.push({ token: r.token, name: name, hasEmail: !!email, notify: notify });
+              d.mine.push({ token: r.token, name: name, hasEmail: hasEmail, notify: notify });
             });
             P.toast(r.onRoster
               ? (other ? t('toastInThem', { name: name, n: r.position }) : t('toastInYou', { n: r.position }))
@@ -560,8 +571,9 @@
           P.busy(e.currentTarget, async function () {
             try {
               await P.api('setNotify', { eventId: ev.id, token: token, notify: want });
+              if ((me().name || '').toLowerCase() === m.name.toLowerCase()) setMe({ notify: want });
               applyLocal(function (d) { d.mine.forEach(function (x) { if (x.token === token) x.notify = want; }); });
-              P.toast(want ? t('notifyOn') : t('notifyOff'));
+              P.toast(want ? t('notifyOnAll') : t('notifyOffAll'));
             } catch (err) {
               P.toast(err.message, true);
             }

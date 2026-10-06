@@ -110,13 +110,13 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
 - **Players are tracked by full name.** Capitals, accents and extra spaces are ignored, so "José Pérez" and "jose perez" are the same person. The same name can't sign up twice for one game. Names typed all in lowercase get capitalized automatically.
 - **Signing up someone else:** after signing up, tap **"+ Sign up someone else (e.g. your kid)"** and enter their full name. Email is optional there too; a parent can use their own.
 - **Edit name / drop out:** the phone remembers your signup, so you'll see "You're signed up – #7 [Edit name] [Drop out]". On a different phone, use **"Already signed up on another phone?"** and enter your full name and email. This only works if you gave an email; otherwise ask the organizer.
-- **Confirmation emails** (only for players who gave an email and left **"Email me updates about this game"** ticked), sent from your Gmail in the player's language, or bilingual if unknown:
+- **Confirmation emails** (only for players who gave an email and left **"Email me updates about my games"** ticked), sent from your Gmail in the player's language, or bilingual if unknown:
   - signed up (roster spot, or waitlist position)
   - "A spot opened up, you're in!" when moving up from the waitlist
   - "Moved to the waitlist" if a reorder or a smaller roster size bumps them
   - dropped out, or removed by the organizer
 
-  Players can switch emails on or off any time from their "You're signed up" card (🔔 / 🔕). You can also change the **Notify** column (TRUE/FALSE) in the Sheet.
+  The email and the yes/no choice are asked **once** and saved to the player's full name, so next week they just type their name. Players can switch emails on or off any time from their "You're signed up" card (🔔 / 🔕), which applies to all their games. You can see or change everyone's email and choice in the **Players** tab of the Sheet (**Notify** TRUE/FALSE).
 
   Gmail allows about 100 recipients a day, which is plenty for this group. To turn emails off, set `SEND_EMAILS = false` near the top of `Code.gs` and redeploy.
 - **Waitlist:** if someone on the roster drops, the first person on the waitlist moves up automatically.
@@ -174,6 +174,13 @@ The Sheet is meant to be readable and editable by hand:
 - **Time / EndTime:** 24-hour like `19:00`. `7:00 PM` also works. EndTime is optional; leave it blank if there isn't one.
 - **Open:** `TRUE` or `FALSE`. Blank counts as open.
 - **ID:** any short unique text, if you add a row by hand.
+
+**Players tab** (one row per player, filled in automatically)
+
+| Name | Email | Notify | Updated |
+|---|---|---|---|
+
+- Saves each player's email and whether they want confirmation emails, for all games. Change **Notify** to FALSE to stop someone's emails.
 
 **Signups tab**
 
