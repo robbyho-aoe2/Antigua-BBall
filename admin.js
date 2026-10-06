@@ -303,9 +303,10 @@
         (ev.waitlist ? ' · ' + ev.waitlist + ' waitlisted' : '') + '</span></h2>' +
       '<form class="card" id="add-form" novalidate>' +
         '<div class="form-grid">' +
-          '<div><label for="a-name">Name</label><input id="a-name" name="name" type="text" maxlength="40" required></div>' +
+          '<div><label for="a-name">Name</label><input id="a-name" name="name" type="text" maxlength="60" required></div>' +
           '<div><label for="a-email">Email (optional)</label><input id="a-email" name="email" type="email" inputmode="email" maxlength="100"></div>' +
         '</div>' +
+        '<p class="hint">Players with an email get confirmation emails (signed up, moved off/onto the waitlist, removed).</p>' +
         '<button class="btn block" type="submit">Add player to the end</button>' +
       '</form>' +
       '<ol class="names">' + (rows || '<li class="empty">No signups yet.</li>') + '</ol>';
@@ -351,7 +352,7 @@
   function editRow(row, id, s) {
     row.innerHTML =
       '<form class="edit-row" novalidate>' +
-        '<input name="name" type="text" maxlength="40" value="' + esc(s.name) + '" aria-label="Name">' +
+        '<input name="name" type="text" maxlength="60" value="' + esc(s.name) + '" aria-label="Name">' +
         '<input name="email" type="email" maxlength="100" value="' + esc(s.email) + '" placeholder="Email (optional)" aria-label="Email">' +
         '<div class="btn-row" style="margin-top:0"><button class="btn sm primary" type="submit">Save</button>' +
         '<button class="btn sm" type="button" data-act="cancel">Cancel</button></div>' +

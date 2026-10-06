@@ -7,7 +7,11 @@
  *
  * Data lives in two tabs (created automatically):
  *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime
- *   Signups: EventID | Name | Email | SignedUpAt | Order | Token
+ *   Signups: EventID | Name | Email | SignedUpAt | Order | Token | Lang
+ *
+ * Players are identified by their full name (accents and capitals ignored).
+ * Email is optional; when given, players get confirmation emails sent from
+ * your Gmail (Google allows about 100 recipients a day on a regular account).
  *
  * The admin password lives in Script Properties under ADMIN_PASSWORD.
  */
@@ -16,12 +20,16 @@ const TZ = 'America/Guatemala';
 const EVENTS_SHEET = 'Events';
 const SIGNUPS_SHEET = 'Signups';
 const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created', 'EndTime'];
-const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token'];
+const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token', 'Lang'];
 const DEFAULT_CAP = 15;
-const MAX_NAME = 40;
+const MAX_NAME = 60;
 const MAX_EMAIL = 100;
-const MAX_PER_EMAIL = 2; // the player plus one family member (e.g. a parent signing up their kid)
 const LEADERBOARD_SIZE = 10;
+
+// Confirmation emails. Set SEND_EMAILS to false to turn them all off.
+const SEND_EMAILS = true;
+const SITE_NAME = 'Antigua Pickup';
+const SITE_URL = 'https://robbyho-aoe2.github.io/Antigua-BBall/';
 
 const PUBLIC_ACTIONS = {
   listEvents: listEvents,
@@ -56,6 +64,19 @@ function setup() {
   Logger.log('Setup complete.');
 }
 
+/**
+ * Sends you a sample confirmation email. Run it once from the editor (select
+ * "testEmail" → Run) to approve email sending and see what players receive.
+ */
+function testEmail() {
+  const me = Session.getEffectiveUser().getEmail();
+  const sample = { id: 'sample', date: addDays_(today_(), 2), time: '19:00', endTime: '21:00', location: 'Centro Integral Deportivo Ciudad Vieja', cap: 15, notes: '' };
+  OUTBOX = [];
+  queueEmail_({ name: 'Test Player', email: me, lang: '' }, sample, 'signup', { position: 7, onRoster: true });
+  flushEmails_();
+  Logger.log('Sent a sample email to ' + me + '. Remaining daily email quota: ' + MailApp.getRemainingDailyQuota());
+}
+
 function doGet() {
   return json_({ ok: true, message: 'Pickup signup API is running.' });
 }
@@ -65,6 +86,7 @@ function doPost(e) {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
     const action = String(req.action || '');
     ensureSheets_();
+    OUTBOX = [];
     let result;
     if (Object.prototype.hasOwnProperty.call(PUBLIC_ACTIONS, action)) {
       result = PUBLIC_ACTIONS[action](req);
@@ -74,8 +96,10 @@ function doPost(e) {
     } else {
       fail_('Unknown action.');
     }
+    flushEmails_();
     return json_(Object.assign({ ok: true }, result));
   } catch (err) {
+    OUTBOX = [];
     if (!err.isUserError) console.error(err && err.stack ? err.stack : err);
     return json_({ ok: false, error: err.isUserError ? err.message : 'Server error: ' + err.message });
   }
@@ -124,31 +148,26 @@ function getEvent(req) {
 }
 
 function signup(req) {
-  const name = cleanName_(req.name);
-  const email = cleanEmail_(req.email, true);
+  const name = requireFullName_(cleanName_(req.name));
+  const email = cleanEmail_(req.email, false);
+  const lang = cleanLang_(req.lang);
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     if (ev.date < today_()) fail_('This game already happened.');
     if (!ev.open) fail_('Signups are closed for this game.');
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     assertNameFree_(list, name, null);
-    const sameEmail = list.filter(function (s) { return s.email === email; });
-    if (sameEmail.length && !req.family) {
-      fail_('This email is already signed up as "' + sameEmail[0].name +
-        '". Signing up your kid or a family member? Tick the family member box.');
-    }
-    if (sameEmail.length >= MAX_PER_EMAIL) {
-      fail_('Only ' + MAX_PER_EMAIL + ' people can sign up with the same email.');
-    }
     const token = Utilities.getUuid();
-    appendSignup_(ev.id, name, email, nextOrder_(list), token);
+    appendSignup_(ev.id, name, email, nextOrder_(list), token, lang);
     const position = list.length + 1;
-    return { token: token, position: position, onRoster: position <= ev.cap };
+    const onRoster = position <= ev.cap;
+    queueEmail_({ name: name, email: email, lang: lang }, ev, 'signup', { position: position, onRoster: onRoster });
+    return { token: token, position: position, onRoster: onRoster };
   });
 }
 
 function rename(req) {
-  const name = cleanName_(req.name);
+  const name = requireFullName_(cleanName_(req.name));
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     if (ev.date < today_()) fail_('This game already happened.');
@@ -164,34 +183,37 @@ function drop(req) {
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     if (ev.date < today_()) fail_('This game already happened.');
-    const list = groupByEvent_(readSignups_())[ev.id] || [];
-    const s = findByToken_(list, req.token);
-    sheet_(SIGNUPS_SHEET).deleteRow(s.row);
-    return {};
+    return withRosterWatch_(ev.id, function (list) {
+      const s = findByToken_(list, req.token);
+      sheet_(SIGNUPS_SHEET).deleteRow(s.row);
+      queueEmail_(s, ev, 'dropped');
+      return {};
+    });
   });
 }
 
-/** Lets a player get their edit token back on a new device using name + email. */
+/** Lets a player get their edit token back on a new device using full name + email. */
 function findSpot(req) {
-  const name = cleanName_(req.name).toLowerCase();
+  const key = nameKey_(cleanName_(req.name));
   const email = cleanEmail_(req.email, true);
   const ev = findEvent_(req.eventId);
   const list = groupByEvent_(readSignups_())[ev.id] || [];
-  const s = list.find(function (x) { return x.email === email && x.name.toLowerCase() === name; });
-  if (!s) fail_('No signup found with that name and email for this game.');
+  const s = list.find(function (x) { return nameKey_(x.name) === key; });
+  if (s && !s.email) fail_('That signup has no email, so it can\'t be found from another phone. Ask the organizer for help.');
+  if (!s || s.email !== email) fail_('No signup found with that name and email for this game.');
   return { token: s.token };
 }
 
 function stats(req) {
-  let email = req.email ? cleanEmail_(req.email, true) : '';
   const signups = readSignups_();
-  if (!email && req.token) {
+  let key = req.name ? nameKey_(cleanName_(req.name)) : '';
+  if (!key && req.token) {
     const s = signups.find(function (x) { return x.token === String(req.token); });
-    if (s) email = s.email;
+    if (s) key = nameKey_(s.name);
   }
-  if (!email) fail_('Enter your email to see your stats.');
+  if (!key) fail_('Enter your full name to see your stats.');
   const all = computeStats_(readEvents_(), signups);
-  const p = all[email] || emptyStats_();
+  const p = all[key] || emptyStats_();
   return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters } };
 }
 
@@ -246,9 +268,12 @@ function adminSaveEvent(req) {
     const sh = sheet_(EVENTS_SHEET);
     if (e.id) {
       const ev = findEvent_(e.id);
-      sh.getRange(ev.row, 2, 1, 6).setValues([[date, time, safeCell_(location), cap, safeCell_(notes), open]]);
-      sh.getRange(ev.row, 9).setValue(endTime);
-      return { id: ev.id };
+      // A new roster size can move people on or off the roster; tell them.
+      return withRosterWatch_(ev.id, function () {
+        sh.getRange(ev.row, 2, 1, 6).setValues([[date, time, safeCell_(location), cap, safeCell_(notes), open]]);
+        sh.getRange(ev.row, 9).setValue(endTime);
+        return { id: ev.id };
+      });
     }
     const id = newId_();
     sh.appendRow([id, date, time, safeCell_(location), cap, safeCell_(notes), open, new Date(), endTime]);
@@ -295,7 +320,9 @@ function adminAddSignup(req) {
     const ev = findEvent_(req.eventId);
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     assertNameFree_(list, name, null);
-    appendSignup_(ev.id, name, email, nextOrder_(list), Utilities.getUuid());
+    appendSignup_(ev.id, name, email, nextOrder_(list), Utilities.getUuid(), '');
+    const position = list.length + 1;
+    queueEmail_({ name: name, email: email, lang: '' }, ev, 'signup', { position: position, onRoster: position <= ev.cap });
     return {};
   });
 }
@@ -316,10 +343,12 @@ function adminUpdateSignup(req) {
 function adminRemoveSignup(req) {
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
-    const list = groupByEvent_(readSignups_())[ev.id] || [];
-    const s = findByToken_(list, req.token);
-    sheet_(SIGNUPS_SHEET).deleteRow(s.row);
-    return {};
+    return withRosterWatch_(ev.id, function (list) {
+      const s = findByToken_(list, req.token);
+      sheet_(SIGNUPS_SHEET).deleteRow(s.row);
+      queueEmail_(s, ev, 'removed');
+      return {};
+    });
   });
 }
 
@@ -327,18 +356,20 @@ function adminMoveSignup(req) {
   const dir = Number(req.dir) < 0 ? -1 : 1;
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
-    const list = groupByEvent_(readSignups_())[ev.id] || [];
-    const i = list.findIndex(function (s) { return s.token === String(req.token || ''); });
-    if (i < 0) fail_('That player is no longer on the list. Refresh and try again.');
-    const j = i + dir;
-    if (j < 0 || j >= list.length) return {};
-    const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
-    // Renumber the whole event 1..n so the Order column stays clean and readable.
-    const sh = sheet_(SIGNUPS_SHEET);
-    list.forEach(function (s, k) {
-      if (s.order !== k + 1) sh.getRange(s.row, 5).setValue(k + 1);
+    return withRosterWatch_(ev.id, function (before) {
+      const list = before.slice();
+      const i = list.findIndex(function (s) { return s.token === String(req.token || ''); });
+      if (i < 0) fail_('That player is no longer on the list. Refresh and try again.');
+      const j = i + dir;
+      if (j < 0 || j >= list.length) return {};
+      const tmp = list[i]; list[i] = list[j]; list[j] = tmp;
+      // Renumber the whole event 1..n so the Order column stays clean and readable.
+      const sh = sheet_(SIGNUPS_SHEET);
+      list.forEach(function (s, k) {
+        if (s.order !== k + 1) sh.getRange(s.row, 5).setValue(k + 1);
+      });
+      return {};
     });
-    return {};
   });
 }
 
@@ -351,7 +382,7 @@ function emptyStats_() {
 }
 
 /**
- * Per-email stats over past games.
+ * Per-player stats over past games, keyed by full name (see nameKey_).
  * - games: past games where they made the roster
  * - streak: consecutive past games on the roster (being waitlisted doesn't break it, skipping a game does)
  * - earlyBirds: times they were first to sign up
@@ -362,31 +393,26 @@ function computeStats_(events, signups) {
   const groups = groupByEvent_(signups);
   const past = events.filter(function (ev) { return ev.date < today; }).sort(byWhen_);
   const players = {};
-  const get = function (email) { return players[email] || (players[email] = emptyStats_()); };
+  const get = function (key) { return players[key] || (players[key] = emptyStats_()); };
 
   const statuses = past.map(function (ev) {
     const list = groups[ev.id] || [];
     const status = {};
     list.forEach(function (s, i) {
-      if (!s.email) return;
-      const onRoster = i < ev.cap;
-      if (!status[s.email]) {
-        status[s.email] = onRoster ? 'roster' : 'wait';
-        get(s.email).name = s.name; // latest game wins, so renames carry forward
-      } else if (onRoster) {
-        status[s.email] = 'roster';
-      }
+      const key = nameKey_(s.name);
+      status[key] = i < ev.cap ? 'roster' : 'wait';
+      get(key).name = s.name; // latest game wins, so the newest spelling shows
     });
-    if (list.length && list[0].email) get(list[0].email).earlyBirds++;
-    if (list.length >= ev.cap && list[ev.cap - 1].email) get(list[ev.cap - 1].email).buzzerBeaters++;
+    if (list.length) get(nameKey_(list[0].name)).earlyBirds++;
+    if (list.length >= ev.cap) get(nameKey_(list[ev.cap - 1].name)).buzzerBeaters++;
     return status;
   });
 
-  Object.keys(players).forEach(function (email) {
-    const p = players[email];
+  Object.keys(players).forEach(function (key) {
+    const p = players[key];
     let cur = 0;
     statuses.forEach(function (status) {
-      const st = status[email];
+      const st = status[key];
       if (st === 'roster') {
         p.games++;
         cur++;
@@ -425,7 +451,9 @@ function ensureSheets_() {
     events.getRange(1, 9).setValue('EndTime').setFontWeight('bold');
     events.getRange('I:I').setNumberFormat('@');
   }
-  ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
+  const signups = ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
+  // Sheets made before the Lang column existed: add its header once.
+  if (signups.getRange(1, 7).getValue() === '') signups.getRange(1, 7).setValue('Lang').setFontWeight('bold');
 }
 
 function ensureSheet_(ss, name, headers, textColumns) {
@@ -476,6 +504,7 @@ function readSignups_() {
       at: r[3] instanceof Date ? r[3].getTime() : (Date.parse(r[3]) || 0),
       order: Number(r[4]) || 0,
       token: String(r[5]).trim(),
+      lang: String(r[6] || '').trim(),
     };
   }).filter(function (s) { return s.eventId && s.name; });
 }
@@ -488,8 +517,8 @@ function fillMissingTokens_() {
   });
 }
 
-function appendSignup_(eventId, name, email, order, token) {
-  sheet_(SIGNUPS_SHEET).appendRow([eventId, name, email, new Date(), order, token]);
+function appendSignup_(eventId, name, email, order, token, lang) {
+  sheet_(SIGNUPS_SHEET).appendRow([eventId, name, email, new Date(), order, token, lang || '']);
 }
 
 function groupByEvent_(signups) {
@@ -521,9 +550,37 @@ function findByToken_(list, token) {
 }
 
 function assertNameFree_(list, name, exceptToken) {
-  const lower = name.toLowerCase();
-  const clash = list.find(function (s) { return s.name.toLowerCase() === lower && s.token !== exceptToken; });
-  if (clash) fail_('"' + name + '" is already on the list. Add a last initial to tell you apart.');
+  const key = nameKey_(name);
+  const clash = list.find(function (s) { return nameKey_(s.name) === key && s.token !== exceptToken; });
+  if (clash) fail_('"' + clash.name + '" is already signed up for this game.');
+}
+
+/** Same person = same full name, ignoring capitals, accents and extra spaces ("José  Pérez" = "jose perez"). */
+function nameKey_(name) {
+  return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
+}
+
+/**
+ * Runs a change and emails anyone it moves on or off the roster
+ * (e.g. someone drops and the first waitlisted player gets their spot).
+ */
+function withRosterWatch_(eventId, change) {
+  const evBefore = findEvent_(eventId);
+  const before = groupByEvent_(readSignups_())[eventId] || [];
+  const result = change(before, evBefore);
+  const ev = findEvent_(eventId);
+  if (SEND_EMAILS && ev.date >= today_()) {
+    const wasOn = {};
+    before.forEach(function (s, i) { if (s.token) wasOn[s.token] = i < evBefore.cap; });
+    (groupByEvent_(readSignups_())[eventId] || []).forEach(function (s, i) {
+      if (!s.token || !(s.token in wasOn)) return;
+      const on = i < ev.cap;
+      if (on && !wasOn[s.token]) queueEmail_(s, ev, 'promoted', { position: i + 1 });
+      if (!on && wasOn[s.token]) queueEmail_(s, ev, 'demoted', { position: i - ev.cap + 1 });
+    });
+  }
+  return result;
 }
 
 function nextOrder_(list) {
@@ -576,7 +633,20 @@ function cleanName_(v) {
   const name = String(v || '').replace(/\s+/g, ' ').trim().replace(/^[=+\-@]+/, '').trim();
   if (!name) fail_('Enter your name.');
   if (name.length > MAX_NAME) fail_('Name is too long (max ' + MAX_NAME + ' characters).');
+  // "pedro gomez" → "Pedro Gomez"; names typed with any capitals are kept as typed.
+  if (name === name.toLowerCase()) {
+    return name.split(' ').map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
+  }
   return name;
+}
+
+function requireFullName_(name) {
+  if (name.split(' ').length < 2) fail_('Please enter your full name (first and last).');
+  return name;
+}
+
+function cleanLang_(v) {
+  return v === 'es' || v === 'en' ? v : '';
 }
 
 function cleanEmail_(v, required) {
@@ -643,6 +713,152 @@ function newId_() {
 
 function pad2_(n) {
   return ('0' + n).slice(-2);
+}
+
+/* ------------------------------------------------------------------ */
+/* Confirmation emails                                                 */
+/* ------------------------------------------------------------------ */
+
+let OUTBOX = [];
+
+// Emails are collected while the sheet is locked and sent after, so a slow
+// send never holds up other players.
+function queueEmail_(s, ev, kind, extra) {
+  if (!SEND_EMAILS || !s.email || ev.date < today_()) return;
+  OUTBOX.push({ to: s.email, name: s.name, lang: s.lang, ev: ev, kind: kind, extra: extra || {} });
+}
+
+function flushEmails_() {
+  const box = OUTBOX;
+  OUTBOX = [];
+  box.forEach(function (m) {
+    try {
+      if (MailApp.getRemainingDailyQuota() < 1) return console.warn('Daily email quota used up; skipped ' + m.kind);
+      const c = composeEmail_(m);
+      MailApp.sendEmail({ to: m.to, subject: c.subject, htmlBody: c.html, body: c.text, name: SITE_NAME });
+    } catch (err) {
+      console.error('Email to ' + m.to + ' failed: ' + err); // never block a signup over email
+    }
+  });
+}
+
+const EMAIL_TEXT = {
+  en: {
+    hi: 'Hi {name},',
+    signupRosterSubj: '✅ You\'re in: {date}',
+    signupRoster: 'You\'re <b>#{pos}</b> on the roster for this game.',
+    signupWaitSubj: '⏳ Waitlist #{pos}: {date}',
+    signupWait: 'The roster is full, so you\'re <b>#{pos} on the waitlist</b>. We\'ll email you if a spot opens up.',
+    waitRule: 'People on the waitlist must wait until there are fewer than {cap} players in order to play. No exceptions.',
+    promotedSubj: '🎉 A spot opened up, you\'re in: {date}',
+    promoted: 'Good news! Someone dropped out and you\'re now <b>#{pos} on the roster</b>.',
+    demotedSubj: '⏳ Moved to the waitlist: {date}',
+    demoted: 'The roster changed and you\'re now <b>#{pos} on the waitlist</b>. We\'ll email you if a spot opens up.',
+    droppedSubj: '👋 You dropped out: {date}',
+    dropped: 'You\'re no longer signed up for this game. Thanks for freeing up the spot!',
+    removedSubj: 'Removed from the list: {date}',
+    removed: 'The organizer removed you from this game. If that\'s a mistake, just reply to this email.',
+    cantMake: 'Can\'t make it? Please drop out so the next person can play.',
+    view: 'View the game',
+    map: 'Map',
+    days: ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'],
+    months: ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+  },
+  es: {
+    hi: 'Hola {name}:',
+    signupRosterSubj: '✅ Estás dentro: {date}',
+    signupRoster: 'Eres el <b>#{pos}</b> en la lista de este partido.',
+    signupWaitSubj: '⏳ Lista de espera #{pos}: {date}',
+    signupWait: 'La lista está llena, así que eres el <b>#{pos} en la lista de espera</b>. Te escribiremos si se abre un lugar.',
+    waitRule: 'Las personas en la lista de espera deben esperar a que haya menos de {cap} jugadores para poder jugar. Sin excepciones.',
+    promotedSubj: '🎉 Se abrió un lugar, estás dentro: {date}',
+    promoted: '¡Buenas noticias! Alguien se dio de baja y ahora eres el <b>#{pos} en la lista</b>.',
+    demotedSubj: '⏳ Pasaste a la lista de espera: {date}',
+    demoted: 'La lista cambió y ahora eres el <b>#{pos} en la lista de espera</b>. Te escribiremos si se abre un lugar.',
+    droppedSubj: '👋 Te diste de baja: {date}',
+    dropped: 'Ya no estás inscrito en este partido. ¡Gracias por liberar el lugar!',
+    removedSubj: 'Te quitaron de la lista: {date}',
+    removed: 'El organizador te quitó de este partido. Si es un error, responde a este correo.',
+    cantMake: '¿No puedes ir? Por favor date de baja para que juegue la siguiente persona.',
+    view: 'Ver el partido',
+    map: 'Mapa',
+    days: ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'],
+    months: ['enero', 'febrero', 'marzo', 'abril', 'mayo', 'junio', 'julio', 'agosto', 'septiembre', 'octubre', 'noviembre', 'diciembre'],
+  },
+};
+
+function composeEmail_(m) {
+  const langs = m.lang === 'en' || m.lang === 'es' ? [m.lang] : ['en', 'es']; // unknown language: send both
+  const ev = m.ev;
+  const link = SITE_URL + '?event=' + encodeURIComponent(ev.id);
+  const mapLink = 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent(ev.location);
+  const key = m.kind === 'signup' ? (m.extra.onRoster ? 'signupRoster' : 'signupWait') : m.kind;
+  const pos = m.kind === 'signup' && !m.extra.onRoster ? m.extra.position - ev.cap : m.extra.position;
+
+  const subjects = [];
+  const htmlParts = [];
+  const textParts = [];
+  langs.forEach(function (lang) {
+    const T = EMAIL_TEXT[lang];
+    const fill = function (str) {
+      return str.replace(/\{(\w+)\}/g, function (_, k) {
+        return { name: esc_(m.name), date: emailDate_(ev.date, lang), pos: pos, cap: ev.cap }[k];
+      });
+    };
+    const when = emailDate_(ev.date, lang) + ' · ' + emailTime_(ev.time, ev.endTime, lang);
+    const waitlisted = key === 'signupWait' || key === 'demoted';
+    const stillPlaying = key === 'signupRoster' || key === 'promoted';
+    subjects.push(fill(T[key + 'Subj']));
+    htmlParts.push(
+      '<p>' + fill(T.hi) + '</p>' +
+      '<p>' + fill(T[key]) + '</p>' +
+      '<p style="margin:16px 0;padding:12px 14px;background:#e3eedb;border-radius:10px">' +
+        '<b>' + esc_(when) + '</b><br>📍 ' + esc_(ev.location) +
+        ' · <a href="' + mapLink + '">' + T.map + '</a>' +
+        (ev.notes ? '<br>' + esc_(ev.notes) : '') +
+      '</p>' +
+      (waitlisted ? '<p style="color:#6e4a00">⚠️ ' + fill(T.waitRule) + '</p>' : '') +
+      (stillPlaying ? '<p>' + T.cantMake + '</p>' : '') +
+      '<p><a href="' + link + '" style="display:inline-block;padding:10px 18px;background:#24502f;color:#fff;border-radius:10px;text-decoration:none;font-weight:bold">' + T.view + '</a></p>'
+    );
+    textParts.push(htmlToText_(htmlParts[htmlParts.length - 1]) + '\n' + link);
+  });
+
+  return {
+    subject: subjects.join(' / '),
+    html: '<div style="font-family:Arial,sans-serif;font-size:15px;color:#2a2620;max-width:520px">' +
+      htmlParts.join('<hr style="border:0;border-top:1px solid #eadfca;margin:24px 0">') +
+      '<p style="color:#6f665a;font-size:12px">' + SITE_NAME + '</p></div>',
+    text: textParts.join('\n\n----\n\n'),
+  };
+}
+
+function emailDate_(ymd, lang) {
+  const p = ymd.split('-').map(Number);
+  const d = new Date(Date.UTC(p[0], p[1] - 1, p[2]));
+  const T = EMAIL_TEXT[lang];
+  const day = T.days[d.getUTCDay()];
+  const month = T.months[p[1] - 1];
+  return lang === 'es' ? day.charAt(0).toUpperCase() + day.slice(1) + ' ' + p[2] + ' de ' + month : day + ', ' + month + ' ' + p[2];
+}
+
+function emailTime_(start, end, lang) {
+  const one = function (hm) {
+    const m = /^(\d{2}):(\d{2})$/.exec(hm || '');
+    if (!m) return hm || '';
+    const h = Number(m[1]);
+    return ((h % 12) || 12) + ':' + m[2] + ' ' + (lang === 'es' ? (h < 12 ? 'a.m.' : 'p.m.') : (h < 12 ? 'AM' : 'PM'));
+  };
+  return end ? one(start) + ' – ' + one(end) : one(start);
+}
+
+function esc_(s) {
+  return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+function htmlToText_(html) {
+  return html.replace(/<br>/g, '\n').replace(/<\/p>/g, '\n\n').replace(/<[^>]+>/g, '')
+    .replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').trim();
 }
 
 function fail_(msg) {

@@ -2,7 +2,7 @@
 
 A free, simple signup site for our weekly pickup games. It replaces SignupGenie.
 
-- **Players** open one link from the group chat, type their name and email, and they're in. The first 15 (or whatever cap you set) make the **roster**. Everyone after that goes on the **waitlist**, and moves up automatically when someone drops.
+- **Players** open one link from the group chat, type their full name (email optional), and they're in. The first 15 (or whatever cap you set) make the **roster**. Everyone after that goes on the **waitlist**, and moves up automatically when someone drops.
 - **Stats:** games played, streaks, "first to sign up" count, badges, and a Regulars leaderboard.
 - **You (admin)** create games, copy last week's game in one click, and manage the list. You can also just edit the Google Sheet.
 
@@ -85,6 +85,10 @@ While you're there, you can also change `SITE_NAME`, `TAGLINE` and `TAGLINE_ES` 
 
 ---
 
+### Allow confirmation emails (one time)
+
+After pasting `Code.gs`, choose **`testEmail`** in the function dropdown and click **▶ Run**. Google asks you to approve sending email as you (same **Advanced → Go to … → Allow** steps as before). It then sends you a sample confirmation, so you can see what players get. Do this **before** redeploying, or emails won't send.
+
 ## Updating the script later (important)
 
 When you change `Code.gs` in the Apps Script editor, **the live site keeps running the old version until you redeploy.** You have two options:
@@ -102,10 +106,17 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
 
 ### For players
 
-- **Sign up:** name and email. The email is only used to let you edit your spot and to track your stats. Other players never see it.
-- **One spot per email per game.** Exception: tick **"I'm signing up a family member"** to add one more person (e.g. a parent and their kid) with the same email. That's 2 people max per email.
-- **Duplicate names are blocked** in the same game (case doesn't matter). If two Juans show up, the second adds a last initial.
-- **Edit name / drop out:** the phone remembers your signup, so you'll see "You're signed up – #7 [Edit name] [Drop out]". On a different phone, use **"Already signed up on another phone?"** and enter your name and email to get your spot back.
+- **Sign up:** full name (first and last) is required; email is optional. Other players never see emails.
+- **Players are tracked by full name.** Capitals, accents and extra spaces are ignored, so "José Pérez" and "jose perez" are the same person. The same name can't sign up twice for one game. Names typed all in lowercase get capitalized automatically.
+- **Signing up someone else:** after signing up, tap **"+ Sign up someone else (e.g. your kid)"** and enter their full name. Email is optional there too; a parent can use their own.
+- **Edit name / drop out:** the phone remembers your signup, so you'll see "You're signed up – #7 [Edit name] [Drop out]". On a different phone, use **"Already signed up on another phone?"** and enter your full name and email. This only works if you gave an email; otherwise ask the organizer.
+- **Confirmation emails** (only for players who gave an email), sent from your Gmail in the player's language, or bilingual if unknown:
+  - signed up (roster spot, or waitlist position)
+  - "A spot opened up, you're in!" when moving up from the waitlist
+  - "Moved to the waitlist" if a reorder or a smaller roster size bumps them
+  - dropped out, or removed by the organizer
+
+  Gmail allows about 100 recipients a day, which is plenty for this group. To turn emails off, set `SEND_EMAILS = false` near the top of `Code.gs` and redeploy.
 - **Waitlist:** if someone on the roster drops, the first person on the waitlist moves up automatically.
 - **Closed signups:** you can still see the roster, and players can still drop out.
 - **Past games** disappear from the main page the day after. The direct link still shows the final list.
@@ -130,7 +141,7 @@ The site can be added to a phone's home screen. It then opens full-screen with i
 
 ### Stats and badges
 
-Stats are tied to your email and count **past games where you made the roster**:
+Stats are tied to your full name and count **past games where you made the roster**:
 
 - **Games:** total games played
 - **Streak 🔥:** games in a row. Being waitlisted doesn't break a streak; skipping a game does.
@@ -164,7 +175,7 @@ The Sheet is meant to be readable and editable by hand:
 
 **Signups tab**
 
-| EventID | Name | Email | SignedUpAt | Order | Token |
+| EventID | Name | Email | SignedUpAt | Order | Token | Lang |
 |---|---|---|---|---|---|
 
 - The list is sorted by **Order** (1, 2, 3…). To reorder by hand, change the numbers. Rows with a blank Order go to the end.
@@ -176,9 +187,9 @@ The Sheet is meant to be readable and editable by hand:
 ## Safety notes
 
 - **Simultaneous signups:** Apps Script's `LockService` makes sure two people can't both grab spot 15 at the same instant.
-- **Emails:** never sent to other players. Only you see them, in admin and in the Sheet.
+- **Emails:** optional, never shown to other players. Only you see them, in admin and in the Sheet.
 - **Inputs:** trimmed and validated. Names are capped at 40 characters, and text is protected against spreadsheet formula injection.
-- **Honest limit:** anyone who knows a player's name and email could drop them. That's fine for a group of friends. If it ever becomes a problem, you'll see it in the Sheet.
+- **Honest limit:** anyone who knows a player's full name and email could drop them. That's fine for a group of friends. If it ever becomes a problem, you'll see it in the Sheet.
 
 ## Files
 

@@ -21,7 +21,7 @@
   ];
 
   let renderSeq = 0;
-  let statsReq = null; // { email, promise }: one stats request per page view, shared by everything that needs it
+  let statsReq = null; // { name, promise }: one stats request per page view, shared by everything that needs it
 
   function field(form, name) { return form.querySelector('[name="' + name + '"]'); }
 
@@ -86,10 +86,13 @@
 
   function same(a, b) { return JSON.stringify(a) === JSON.stringify(b); }
 
-  function getStats(email) {
-    if (!statsReq || statsReq.email !== email) {
-      statsReq = { email: email, promise: P.api('stats', { email: email }) };
-      statsReq.promise.then(function (r) { P.cache.set('stats.' + email, r.stats); }).catch(function () {});
+  function statsKey(name) { return 'stats.' + name.toLowerCase(); }
+
+  // Players are tracked by full name, so stats are looked up by name.
+  function getStats(name) {
+    if (!statsReq || statsReq.name !== name) {
+      statsReq = { name: name, promise: P.api('stats', { name: name }) };
+      statsReq.promise.then(function (r) { P.cache.set(statsKey(name), r.stats); }).catch(function () {});
     }
     return statsReq.promise;
   }
@@ -111,7 +114,7 @@
     // Paint the last-seen list right away; the fresh one replaces it when it arrives.
     const cached = silent ? null : P.cache.get('home');
     if (cached) renderHome(cached); else if (!silent) loading();
-    if (me().email) getStats(me().email); // fetch in parallel with the list
+    if (me().name) getStats(me().name); // fetch in parallel with the list
     let data;
     try {
       data = await P.api('listEvents');
@@ -214,19 +217,19 @@
   function renderStatsBox() {
     const box = document.getElementById('stats-box');
     if (!box) return;
-    const email = me().email;
-    if (!email) {
+    const name = me().name;
+    if (!name) {
       box.innerHTML =
         '<form id="stats-form">' +
-          '<label for="st-email">' + t('statsPrompt') + '</label>' +
-          '<input id="st-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>' +
+          '<label for="st-name">' + t('statsPrompt') + '</label>' +
+          '<input id="st-name" name="name" type="text" autocomplete="name" maxlength="60" placeholder="' + esc(t('fullNamePh')) + '" required>' +
           '<button class="btn primary block" type="submit">' + t('showStats') + '</button>' +
         '</form>';
       document.getElementById('stats-form').onsubmit = function (e) {
         e.preventDefault();
-        const val = field(e.target, 'email').value.trim();
+        const val = field(e.target, 'name').value.replace(/\s+/g, ' ').trim();
         if (!val) return;
-        setMe({ email: val.toLowerCase() });
+        setMe({ name: val });
         renderStatsBox();
       };
       return;
@@ -236,18 +239,18 @@
         (stats.name ? '<div><b>' + esc(stats.name) + '</b></div>' : '') +
         statsHtml(stats) +
         '<button class="linkish small" id="not-me">' + t('notYou') + '</button>';
-      document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
+      document.getElementById('not-me').onclick = function () { setMe({ name: '' }); renderStatsBox(); };
     };
-    const cachedStats = P.cache.get('stats.' + email);
+    const cachedStats = P.cache.get(statsKey(name));
     if (cachedStats) paint(cachedStats);
     else box.innerHTML = '<div class="muted small">' + t('loadingStats') + '</div>';
-    getStats(email).then(function (r) {
+    getStats(name).then(function (r) {
       if (box.isConnected && !same(cachedStats, r.stats)) paint(r.stats);
     }).catch(function (e) {
       if (!box.isConnected || cachedStats) return;
       box.innerHTML = '<div class="error-box small">' + esc(e.message) + '</div>' +
         '<button class="linkish small" id="not-me">' + t('useDifferent') + '</button>';
-      document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
+      document.getElementById('not-me').onclick = function () { setMe({ name: '' }); renderStatsBox(); };
     });
   }
 
@@ -285,7 +288,7 @@
     let cached = silent ? null : P.cache.get(cacheKey);
     if (cached && !same(cached.tokens, tokens)) cached = null; // signed up/dropped since: don't show a stale "you"
     if (cached) renderEvent(cached.data); else if (!silent) loading();
-    if (me().email) getStats(me().email); // fetch in parallel with the game
+    if (me().name) getStats(me().name); // fetch in parallel with the game
     let data;
     try {
       data = await P.api('getEvent', { eventId: id, tokens: tokens });
@@ -361,8 +364,8 @@
         if (!mine.length) html += '<div class="banner">' + t('closedBanner') + '</div>';
       } else if (!mine.length) {
         html += signupForm(ev, false);
-      } else if (mine.length < 2) {
-        html += '<details class="find"><summary>' + t('addFamily') + '</summary>' + signupForm(ev, true) + '</details>';
+      } else {
+        html += '<details class="find"><summary>' + t('addSomeoneElse') + '</summary>' + signupForm(ev, true) + '</details>';
       }
       if (!mine.length) html += findSpotHtml();
     }
@@ -390,7 +393,7 @@
           '</div>' +
           '<form class="hidden" data-act="rename-form">' +
             '<label>' + t('newName') + '</label>' +
-            '<input name="name" type="text" maxlength="40" autocomplete="name" value="' + esc(m.name) + '" required>' +
+            '<input name="name" type="text" maxlength="60" autocomplete="name" value="' + esc(m.name) + '" required>' +
             '<div class="btn-row"><button class="btn primary" type="submit">' + t('save') + '</button>' +
             '<button class="btn" type="button" data-act="cancel">' + t('cancel') + '</button></div>' +
           '</form>') +
@@ -398,19 +401,19 @@
     );
   }
 
-  function signupForm(ev, family) {
+  // other = signing up someone else (e.g. a parent signing up their kid) from this phone.
+  function signupForm(ev, other) {
     const m = me();
     const full = ev.filled >= ev.cap;
+    const sfx = other ? '-o' : '';
     return (
-      '<form class="card" data-act="signup"' + (family ? ' data-family="1"' : '') + ' novalidate>' +
-        '<label for="su-name' + (family ? '-f' : '') + '">' + (family ? t('theirName') : t('yourName')) + '</label>' +
-        '<input id="su-name' + (family ? '-f' : '') + '" name="name" type="text" maxlength="40" autocomplete="' + (family ? 'off' : 'name') + '" required value="' + (family ? '' : esc(m.name || '')) + '">' +
-        '<label for="su-email' + (family ? '-f' : '') + '">' + (family ? t('yourEmail') : t('email')) + '</label>' +
+      '<form class="card" data-act="signup"' + (other ? ' data-other="1"' : '') + ' novalidate>' +
+        '<label for="su-name' + sfx + '">' + (other ? t('theirFullName') : t('fullName')) + '</label>' +
+        '<input id="su-name' + sfx + '" name="name" type="text" maxlength="60" autocomplete="' + (other ? 'off' : 'name') + '" placeholder="' + esc(t('fullNamePh')) + '" required value="' + (other ? '' : esc(m.name || '')) + '">' +
+        '<label for="su-email' + sfx + '">' + t('emailOptional') + '</label>' +
         '<p class="email-why">' + t('emailWhy') + '</p>' +
-        '<input id="su-email' + (family ? '-f' : '') + '" name="email" type="email" inputmode="email" autocomplete="email" maxlength="100" required value="' + esc(m.email || '') + '">' +
-        (family ? '' :
-          '<label class="check"><input type="checkbox" name="family"><span>' + t('familyCheck') + '</span></label>') +
-        '<button class="btn primary block" type="submit">' + (full ? t('joinWaitlist') : (family ? t('signThemUp') : t('signMeUp'))) + '</button>' +
+        '<input id="su-email' + sfx + '" name="email" type="email" inputmode="email" autocomplete="email" maxlength="100" value="' + esc(m.email || '') + '">' +
+        '<button class="btn primary block" type="submit">' + (full ? t('joinWaitlist') : (other ? t('signThemUp') : t('signMeUp'))) + '</button>' +
         (full ? '<p class="hint">' + t('fullHint') + '</p>' : '') +
       '</form>'
     );
@@ -420,8 +423,9 @@
     return (
       '<details class="find"><summary>' + t('otherPhone') + '</summary>' +
         '<form class="card" data-act="find" novalidate>' +
+          '<p class="hint" style="margin-top:0">' + t('findHint') + '</p>' +
           '<label for="fs-name">' + t('nameSignedUpWith') + '</label>' +
-          '<input id="fs-name" name="name" type="text" maxlength="40" autocomplete="name" required value="' + esc(me().name || '') + '">' +
+          '<input id="fs-name" name="name" type="text" maxlength="60" autocomplete="name" required value="' + esc(me().name || '') + '">' +
           '<label for="fs-email">' + t('email') + '</label>' +
           '<input id="fs-email" name="email" type="email" inputmode="email" autocomplete="email" required value="' + esc(me().email || '') + '">' +
           '<button class="btn block" type="submit">' + t('findSpot') + '</button>' +
@@ -458,34 +462,26 @@
     document.getElementById('share-btn').onclick = function () { share(ev); };
 
     app.querySelectorAll('form[data-act="signup"]').forEach(function (form) {
-      const family = form.dataset.family === '1';
-      const box = form.querySelector('input[name="family"]');
-      if (box) {
-        box.onchange = function () {
-          // Signing up someone else: don't leave your own name in the box.
-          if (box.checked && field(form, 'name').value.trim() === (me().name || '')) field(form, 'name').value = '';
-          else if (!box.checked && !field(form, 'name').value.trim()) field(form, 'name').value = me().name || '';
-          field(form, 'name').focus();
-        };
-      }
+      const other = form.dataset.other === '1';
       form.onsubmit = function (e) {
         e.preventDefault();
-        const isFamily = family || (box && box.checked);
-        const name = field(form, 'name').value.trim();
+        const name = field(form, 'name').value.replace(/\s+/g, ' ').trim();
         const email = field(form, 'email').value.trim();
         if (!name) return P.toast(t('enterName'), true);
-        if (!email) return P.toast(t('enterEmail'), true);
+        if (name.split(' ').length < 2) return P.toast(t('fullNameNeeded'), true);
         P.busy(form.querySelector('button[type=submit]'), async function () {
           try {
-            const r = await P.api('signup', { eventId: ev.id, name: name, email: email, family: !!isFamily });
+            const r = await P.api('signup', { eventId: ev.id, name: name, email: email, lang: P.lang() });
             addToken(ev.id, r.token);
-            setMe(isFamily ? { email: email.toLowerCase() } : { name: name, email: email.toLowerCase() });
+            // Remember who "me" is (for stats and prefill) only from your own signup.
+            if (!other) setMe({ name: name, email: email.toLowerCase() });
+            else if (email && !me().email) setMe({ email: email.toLowerCase() });
             applyLocal(function (d) {
               d.waitlist.push({ name: name });
               d.mine.push({ token: r.token, name: name });
             });
             P.toast(r.onRoster
-              ? (isFamily ? t('toastInThem', { name: name, n: r.position }) : t('toastInYou', { n: r.position }))
+              ? (other ? t('toastInThem', { name: name, n: r.position }) : t('toastInYou', { n: r.position }))
               : t('toastWait', { n: r.position - ev.cap }));
             showEvent(ev.id, true);
           } catch (err) {
@@ -531,8 +527,9 @@
       };
       form.onsubmit = function (e) {
         e.preventDefault();
-        const name = field(form, 'name').value.trim();
+        const name = field(form, 'name').value.replace(/\s+/g, ' ').trim();
         if (!name) return P.toast(t('enterName'), true);
+        if (name.split(' ').length < 2) return P.toast(t('fullNameNeeded'), true);
         P.busy(form.querySelector('button[type=submit]'), async function () {
           try {
             await P.api('rename', { eventId: ev.id, token: token, name: name });
@@ -572,11 +569,11 @@
 
     const statsBox = document.getElementById('my-stats');
     if (statsBox) {
-      const email = me().email;
+      const name = me().name;
       const paint = function (stats) { statsBox.innerHTML = '<div><b>' + t('yourStats') + '</b></div>' + statsHtml(stats); };
-      const cachedStats = email && P.cache.get('stats.' + email);
+      const cachedStats = name && P.cache.get(statsKey(name));
       if (cachedStats) paint(cachedStats);
-      (email ? getStats(email) : P.api('stats', { token: mine[0].token })).then(function (r) {
+      (name ? getStats(name) : P.api('stats', { token: mine[0].token })).then(function (r) {
         if (statsBox.isConnected) paint(r.stats);
       }).catch(function () { if (!cachedStats) statsBox.remove(); });
     }
