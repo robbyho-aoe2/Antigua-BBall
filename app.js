@@ -128,6 +128,7 @@
 
   function renderHome(data) {
     app.innerHTML =
+      '<div id="account-slot"></div>' +
       '<h2>' + t('upcoming') + '</h2>' +
       (data.events.length
         ? data.events.map(eventCard).join('')
@@ -135,8 +136,67 @@
       '<div id="install-slot"></div>' +
       '<h2>' + t('yourStats') + '</h2><div class="card" id="stats-box"></div>' +
       leadersHtml(data.leaders);
+    renderAccount();
     renderStatsBox();
     renderInstall();
+  }
+
+  /* ---------- "you" card: who this phone is signed up as, and email updates ---------- */
+
+  function renderAccount() {
+    const slot = document.getElementById('account-slot');
+    if (!slot) return;
+    const m = me();
+    if (!m.email) {
+      slot.innerHTML = '<div class="card account muted small">👤 ' + t('accountNone') + '</div>';
+      return;
+    }
+    const on = m.notify !== false; // everyone gets emails unless they opted out
+    slot.innerHTML =
+      '<div class="card account">' +
+        '<div class="account-who">👤 <b>' + esc(m.name || '') + '</b> <span class="muted small">' + esc(m.email) + '</span></div>' +
+        '<div class="notify-line small">' + (on ? t('notifyOn') : t('notifyOff')) +
+          ' · <button class="linkish small" id="account-notify">' + (on ? t('turnOff') : t('turnOn')) + '</button>' +
+          ' · <button class="linkish small" id="account-switch">' + t('notYouShort') + '</button>' +
+        '</div>' +
+      '</div>';
+    document.getElementById('account-notify').onclick = function (e) {
+      P.busy(e.currentTarget, async function () {
+        try {
+          await setNotifyAnywhere(!on);
+          P.toast(!on ? t('notifyOnAll') : t('notifyOffAll'));
+        } catch (err) {
+          P.toast(err.message, true);
+        }
+        renderAccount();
+      });
+    };
+    document.getElementById('account-switch').onclick = function () {
+      setMe({ name: '', email: '', notify: undefined });
+      renderAccount();
+      renderStatsBox();
+    };
+  }
+
+  // The server changes the choice for whoever owns a signup, so use any signup this phone remembers.
+  async function setNotifyAnywhere(want) {
+    const all = P.store.get(TOKENS_KEY, {}) || {};
+    const pairs = [];
+    Object.keys(all).forEach(function (eventId) {
+      [].concat(all[eventId] || []).forEach(function (token) { pairs.push([eventId, token]); });
+    });
+    if (!pairs.length) throw new Error(t('notifyNeedsSignup'));
+    let lastErr;
+    for (let i = pairs.length - 1; i >= 0; i--) { // newest signups last, so try them first
+      try {
+        await P.api('setNotify', { eventId: pairs[i][0], token: pairs[i][1], notify: want });
+        setMe({ notify: want });
+        return;
+      } catch (err) {
+        lastErr = err; // that game may have been deleted; try another
+      }
+    }
+    throw lastErr;
   }
 
   /* ---------- install card ---------- */
@@ -236,7 +296,7 @@
         (stats.name ? '<div><b>' + esc(stats.name) + '</b></div>' : '') +
         statsHtml(stats) +
         '<button class="linkish small" id="not-me">' + t('notYou') + '</button>';
-      document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
+      document.getElementById('not-me').onclick = function () { setMe({ name: '', email: '', notify: undefined }); renderAccount(); renderStatsBox(); };
     };
     const cachedStats = P.cache.get('stats.' + email);
     if (cachedStats) paint(cachedStats);
@@ -247,7 +307,7 @@
       if (!box.isConnected || cachedStats) return;
       box.innerHTML = '<div class="error-box small">' + esc(e.message) + '</div>' +
         '<button class="linkish small" id="not-me">' + t('useDifferent') + '</button>';
-      document.getElementById('not-me').onclick = function () { setMe({ email: '' }); renderStatsBox(); };
+      document.getElementById('not-me').onclick = function () { setMe({ name: '', email: '', notify: undefined }); renderAccount(); renderStatsBox(); };
     });
   }
 
@@ -296,6 +356,7 @@
     // Forget signups that were dropped or removed by the admin.
     const live = data.mine.map(function (m) { return m.token; });
     if (tokens.some(function (t) { return live.indexOf(t) < 0; })) setTokens(id, live);
+    if (data.mine.length && typeof data.mine[0].notify === 'boolean') setMe({ notify: data.mine[0].notify });
     P.cache.set(cacheKey, { tokens: tokensFor(id), data: data });
     if (seq !== renderSeq) return;
     if (cached && same(cached.data, data)) return;
