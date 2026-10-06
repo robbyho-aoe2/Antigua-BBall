@@ -2,6 +2,7 @@
 (function () {
   const P = window.Pickup;
   const esc = P.esc;
+  const I = window.PickupIcons;
   const t = P.t;
   const tn = P.tn;
   const app = document.getElementById('app');
@@ -11,17 +12,17 @@
 
   // Levels by games played; a player shows only their current level.
   const LEVELS = [
-    { icon: '🏀', name: t('badgeRookie'), games: 1 },    // 1–5
-    { icon: '⭐', name: t('badgeRegular'), games: 6 },   // 6–15
-    { icon: '🏅', name: t('badgeVeteran'), games: 16 },  // 16–49
-    { icon: '👑', name: t('badgeLegend'), games: 50 },   // 50+
+    { key: 'rookie', name: t('badgeRookie'), games: 1 },    // 1–5
+    { key: 'regular', name: t('badgeRegular'), games: 6 },  // 6–15
+    { key: 'veteran', name: t('badgeVeteran'), games: 16 }, // 16–49
+    { key: 'legend', name: t('badgeLegend'), games: 50 },   // 50+
   ];
   // Extra badges; only shown once earned.
   const BADGES = [
-    { icon: '🔥', name: t('badgeOnFire'), hint: t('hintInARow', { n: 3 }), test: function (s) { return s.streak >= 3; } },
-    { icon: '💪', name: t('badgeIronMan'), hint: t('hintLast10'), test: function (s) { return (s.last10 || 0) >= 8; } },
-    { icon: '🐦', name: t('badgeEarlyBird'), hint: t('hintEarly'), test: function (s) { return (s.early || 0) > (s.late || 0); } },
-    { icon: '🚨', name: t('badgeBuzzer'), hint: t('hintLate'), test: function (s) { return (s.late || 0) > (s.early || 0); } },
+    { key: 'onFire', name: t('badgeOnFire'), hint: t('hintInARow', { n: 3 }), test: function (s) { return s.streak >= 3; } },
+    { key: 'ironMan', name: t('badgeIronMan'), hint: t('hintLast10'), test: function (s) { return (s.last10 || 0) >= 8; } },
+    { key: 'earlyBird', name: t('badgeEarlyBird'), hint: t('hintEarly'), test: function (s) { return (s.early || 0) > (s.late || 0); } },
+    { key: 'buzzer', name: t('badgeBuzzer'), hint: t('hintLate'), test: function (s) { return (s.late || 0) > (s.early || 0); } },
   ];
 
   let renderSeq = 0;
@@ -231,14 +232,14 @@
   function leadersHtml(leaders) {
     if (!leaders || !leaders.length) return '';
     return (
-      '<h2>' + t('regulars') + '</h2>' +
+      '<h2 class="with-ic">' + I.svg('trophy') + t('regulars') + '</h2>' +
       '<ol class="names leaders">' +
       leaders.map(function (p, i) {
         return '<li><span class="n">' + (i + 1) + '</span><span>' + esc(p.name) + '</span>' +
           '<span class="g">' + tn('game', p.games) + '</span>' +
-          '<span class="s">' + (p.streak >= 2 ? '🔥' + p.streak : '') + '</span></li>';
+          '<span class="s">' + (p.streak >= 2 ? I.svg('flame', 'ic-flame') + p.streak : '') + '</span></li>';
       }).join('') +
-      '</ol><p class="hint">' + t('leadersHint') + '</p>'
+      '</ol><p class="hint">' + t('leadersHint').replace('{flame}', I.svg('flame', 'ic-flame')) + '</p>'
     );
   }
 
@@ -251,7 +252,7 @@
     const m = me();
     if (!m.email) {
       box.innerHTML =
-        '<p class="small muted" style="margin-top:0">👤 ' + t('accountNone') + '</p>' +
+        '<p class="small muted account-none" style="margin-top:0">' + I.svg('user') + '<span>' + t('accountNone') + '</span></p>' +
         '<form id="stats-form">' +
           '<label for="st-email">' + t('statsPrompt') + '</label>' +
           '<input id="st-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>' +
@@ -269,8 +270,8 @@
     const on = m.notify !== false; // everyone gets emails unless they opted out
     const head = function (name) {
       return (
-        '<div class="account-who">👤 <b>' + esc(m.name || name || '') + '</b> <span class="muted small">' + esc(m.email) + '</span></div>' +
-        '<div class="notify-line small">' + (on ? t('notifyOn') : t('notifyOff')) +
+        '<div class="account-who">' + I.svg('user', 'ic-user') + ' <b>' + esc(m.name || name || '') + '</b> <span class="muted small">' + esc(m.email) + '</span></div>' +
+        '<div class="notify-line small">' + (on ? I.svg('bell') + t('notifyOn') : I.svg('bellOff') + t('notifyOff')) +
           ' · <button class="linkish small" data-act="notify">' + (on ? t('turnOff') : t('turnOn')) + '</button>' +
           ' · <button class="linkish small" data-act="switch">' + t('notYouShort') + '</button>' +
         '</div>'
@@ -314,19 +315,20 @@
     return (
       '<div class="stats-grid">' +
         '<div class="stat"><b>' + s.games + '</b><span>' + t('statGames') + '</span></div>' +
-        '<div class="stat"><b>' + (s.streak ? '🔥' + s.streak : '0') + '</b><span>' + t('statStreak') + '</span></div>' +
+        '<div class="stat"><b>' + (s.streak ? I.svg('flame', 'ic-flame') + s.streak : '0') + '</b><span>' + t('statStreak') + '</span></div>' +
         '<div class="stat"><b>' + s.bestStreak + '</b><span>' + t('statBest') + '</span></div>' +
         '<div class="stat"><b>' + s.earlyBirds + '</b><span>' + t('statFirst') + '</span></div>' +
       '</div>' +
       (earned.length
         ? '<div class="badges">' +
           earned.map(function (b) {
-            return '<span class="badge" title="' + esc(b.hint) + '">' + b.icon + ' ' + b.name + '</span>';
+            return '<span class="badge" title="' + esc(b.hint) + '">' + I.medal(b.key) + esc(b.name) + '</span>';
           }).join('') +
           '</div>'
         : '') +
       (next
-        ? '<div class="next-goal">' + esc(tn('nextGoal', next.games - s.games, { badge: next.icon + ' ' + next.name })) + '</div>'
+        ? '<div class="next-goal">' + esc(tn('nextGoal', next.games - s.games, { badge: '\u0000' }))
+            .replace('\u0000', I.medal(next.key, 'medal-sm') + esc(next.name)) + '</div>'
         : '')
     );
   }
@@ -402,7 +404,7 @@
         '<h2>' + esc(P.fmtDate(ev.date, { weekday: 'long', month: 'long', day: 'numeric' })) + '</h2>' +
         '<div class="when">' + esc(P.fmtTimeRange(ev.time, ev.endTime)) + '</div>' +
         '<a class="where" href="' + esc(P.mapsUrl(ev.location)) + '" target="_blank" rel="noopener">' +
-          '<span class="pin" aria-hidden="true">📍</span><span><span class="where-name">' + esc(ev.location) + '</span>' +
+          '<span class="pin">' + I.svg('pin') + '</span><span><span class="where-name">' + esc(ev.location) + '</span>' +
           (P.findLocation(ev.location) && P.findLocation(ev.location).address
             ? '<span class="where-addr">' + esc(P.findLocation(ev.location).address) + '</span>' : '') +
           '<span class="where-map">' + t('openMap') + ' ↗</span></span></a>' +
@@ -435,14 +437,14 @@
   function meCard(ev, m, count) {
     const title = count > 1 ? esc(m.name) + ' – #' + m.position : t('youreSignedUp', { n: m.position });
     const sub = m.onRoster
-      ? t('onRosterAs', { name: esc(m.name) })
+      ? t('onRosterAs', { name: esc(m.name) }) + ' ' + I.svg('check', 'ic-check')
       : t('onWaitlistAs', { n: m.waitlistPosition, name: esc(m.name) });
     return (
       '<div class="card me-card' + (m.onRoster ? '' : ' waitlisted') + '" data-token="' + esc(m.token) + '">' +
         '<div class="big">' + title + '</div>' +
         '<div class="small">' + sub + '</div>' +
         (!ev.past && typeof m.notify === 'boolean'
-          ? '<div class="notify-line small">' + (m.notify ? t('notifyOn') : t('notifyOff')) +
+          ? '<div class="notify-line small">' + (m.notify ? I.svg('bell') + t('notifyOn') : I.svg('bellOff') + t('notifyOff')) +
             ' · <button class="linkish small" data-act="notify">' + (m.notify ? t('turnOff') : t('turnOn')) + '</button></div>'
           : '') +
         (ev.past ? '' :
@@ -514,7 +516,7 @@
       '</section>';
     if (data.waitlist.length) {
       html += '<section class="list-section"><h3>' + t('waitlist') + ' <span class="count">' + data.waitlist.length + '</span></h3>' +
-        '<p class="wait-rule">⚠️ ' + esc(t('waitRule', { cap: ev.cap })) + '</p>' +
+        '<p class="wait-rule">' + I.svg('alert') + '<span>' + esc(t('waitRule', { cap: ev.cap })) + '</span></p>' +
         cols(data.waitlist, 'wait') + '</section>';
     }
     return html;

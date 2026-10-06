@@ -204,6 +204,7 @@ The Sheet is meant to be readable and editable by hand:
 | `admin.html`, `admin.js` | Admin page |
 | `common.js` | Shared helpers (talking to the server, formatting, language) |
 | `i18n.js` | All player-facing text in English and Spanish |
+| `icons.js` | The site's custom icons and badge medallions (SVG) |
 | `style.css` | Panza Verde colors: jade green, Antigua arch yellow, terracotta, cream |
 | `manifest.webmanifest`, `sw.js`, `icons/` | Make the site installable as a phone app |
 | `config.js` | **The one file you edit:** your Apps Script URL and site name |

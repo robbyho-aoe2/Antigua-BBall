@@ -247,7 +247,7 @@ details.find summary { cursor: pointer; color: var(--jade-700); font-weight: 600
 /* ---------- Stats ---------- */
 .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 10px; }
 .stat { background: #fff; border: 1px solid var(--line); border-radius: 10px; padding: 8px 4px; text-align: center; }
-.stat b { display: block; font-size: 22px; color: var(--jade-900); line-height: 1.2; }
+.stat b { display: flex; align-items: center; justify-content: center; font-size: 22px; color: var(--jade-900); line-height: 1.2; }
 .stat span { display: block; line-height: 1.25; font-size: 11px; color: var(--stone); text-transform: uppercase; letter-spacing: .3px; }
 .badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
 .badge { font-size: 13px; padding: 4px 10px; border-radius: 99px; background: var(--ochre-100); border: 1px solid #f0d89c; }
@@ -286,6 +286,26 @@ details.find summary { cursor: pointer; color: var(--jade-700); font-weight: 600
 @keyframes shimmer { from { background-position: 200% 0; } to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ---------- Icons ---------- */
+.ic { width: 1.15em; height: 1.15em; flex: none; vertical-align: -0.2em; color: var(--jade-700); }
+.ic-flame { color: var(--terracotta); width: 1em; height: 1em; margin-right: 1px; }
+.ic-check { color: var(--jade-500); }
+.ic-user { color: var(--jade-700); }
+.medal { display: inline-grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; flex: none; box-shadow: inset 0 -2px 0 rgba(0,0,0,.15); }
+.medal .ic { width: 16px; height: 16px; color: inherit; stroke-width: 2.2; vertical-align: 0; }
+.medal-sm { width: 20px; height: 20px; vertical-align: -5px; margin-right: 3px; }
+.medal-sm .ic { width: 12px; height: 12px; }
+.badge { display: inline-flex; align-items: center; gap: 6px; padding: 3px 12px 3px 3px; }
+.notify-line .ic { margin-right: 4px; }
+.account-none { display: flex; gap: 8px; align-items: flex-start; }
+.account-none .ic { margin-top: 2px; }
+.wait-rule { display: flex; gap: 8px; align-items: flex-start; }
+.wait-rule .ic { color: #8a5d00; margin-top: 1px; }
+.event-head .where .pin .ic { width: 20px; height: 20px; color: var(--terracotta); }
+h2.with-ic { display: flex; align-items: center; gap: 8px; }
+h2.with-ic .ic { color: var(--ochre); width: 22px; height: 22px; }
+.leaders li .s { display: inline-flex; align-items: center; justify-content: flex-end; }
 
 /* ---------- Toast & loading ---------- */
 .toast {
