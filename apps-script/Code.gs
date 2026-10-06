@@ -246,7 +246,7 @@ function stats(req) {
   if (!email) fail_('Enter your email to see your stats.');
   const all = computeStats_(readEvents_(), signups);
   const p = all[email] || emptyStats_();
-  return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters } };
+  return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters, last10: p.last10, early: p.early, late: p.late } };
 }
 
 /* ------------------------------------------------------------------ */
@@ -410,7 +410,7 @@ function adminMoveSignup(req) {
 /* ------------------------------------------------------------------ */
 
 function emptyStats_() {
-  return { name: '', games: 0, streak: 0, bestStreak: 0, earlyBirds: 0, buzzerBeaters: 0 };
+  return { name: '', games: 0, streak: 0, bestStreak: 0, earlyBirds: 0, buzzerBeaters: 0, last10: 0, early: 0, late: 0 };
 }
 
 /**
@@ -419,6 +419,8 @@ function emptyStats_() {
  * - streak: consecutive past games on the roster (being waitlisted doesn't break it, skipping a game does)
  * - earlyBirds: times they were first to sign up
  * - buzzerBeaters: times they got the last roster spot (e.g. #15 of 15)
+ * - last10: how many of the group's last 10 games they played (Iron Man badge)
+ * - early / late: how often they signed up in spots 1–5 vs 6+ (Early Bird / Buzzer Beater badges)
  */
 function computeStats_(events, signups) {
   const today = today_();
@@ -436,6 +438,7 @@ function computeStats_(events, signups) {
       if (!status[s.email]) {
         status[s.email] = onRoster ? 'roster' : 'wait';
         get(s.email).name = s.name; // latest game wins, so renames carry forward
+        if (i < 5) get(s.email).early++; else get(s.email).late++;
       } else if (onRoster) {
         status[s.email] = 'roster';
       }
@@ -448,8 +451,9 @@ function computeStats_(events, signups) {
   Object.keys(players).forEach(function (email) {
     const p = players[email];
     let cur = 0;
-    statuses.forEach(function (status) {
+    statuses.forEach(function (status, idx) {
       const st = status[email];
+      if (st === 'roster' && idx >= statuses.length - 10) p.last10++;
       if (st === 'roster') {
         p.games++;
         cur++;

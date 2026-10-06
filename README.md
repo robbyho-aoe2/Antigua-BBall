@@ -147,7 +147,12 @@ Stats are tied to your email and count **past games where you made the roster**:
 - **Streak 🔥:** games in a row. Being waitlisted doesn't break a streak; skipping a game does.
 - **Best streak:** your longest streak ever
 - **First in:** how many times you were the first to sign up
-- **Badges:** 🏀 Rookie (1 game), ⭐ Regular (10), 🏅 Veteran (25), 👑 Legend (50), 🔥 On Fire (3 in a row), 💪 Iron Man (10 in a row), 🐦 Early Bird (first to sign up), 🚨 Buzzer Beater (grabbed the last roster spot, e.g. #15 of 15)
+- **Badges** (only shown once earned):
+  - Level, by games played (only the current one shows): 🏀 Rookie 1–5, ⭐ Regular 6–15, 🏅 Veteran 16–49, 👑 Legend 50+. Below the badges it says how many more games to the next level.
+  - 🔥 On Fire: on the roster 3+ games in a row right now
+  - 💪 Iron Man: played 8+ of the group's last 10 games
+  - 🐦 Early Bird: usually signs up in spots 1–5
+  - 🚨 Buzzer Beater: usually signs up in spot 6 or later
 
 The home page also shows a **🏆 Regulars** top-10 leaderboard (names only).
 

@@ -9,15 +9,19 @@
   const TOKENS_KEY = 'pickup.tokens'; // { eventId: [token, ...] }
   const ME_KEY = 'pickup.me';         // { name, email } to prefill the form and load stats
 
+  // Levels by games played; a player shows only their current level.
+  const LEVELS = [
+    { icon: '🏀', name: t('badgeRookie'), games: 1 },    // 1–5
+    { icon: '⭐', name: t('badgeRegular'), games: 6 },   // 6–15
+    { icon: '🏅', name: t('badgeVeteran'), games: 16 },  // 16–49
+    { icon: '👑', name: t('badgeLegend'), games: 50 },   // 50+
+  ];
+  // Extra badges; only shown once earned.
   const BADGES = [
-    { icon: '🏀', name: t('badgeRookie'), games: 1 },
-    { icon: '⭐', name: t('badgeRegular'), games: 10 },
-    { icon: '🏅', name: t('badgeVeteran'), games: 25 },
-    { icon: '👑', name: t('badgeLegend'), games: 50 },
-    { icon: '🔥', name: t('badgeOnFire'), hint: t('hintInARow', { n: 3 }), test: function (s) { return s.bestStreak >= 3; } },
-    { icon: '💪', name: t('badgeIronMan'), hint: t('hintInARow', { n: 10 }), test: function (s) { return s.bestStreak >= 10; } },
-    { icon: '🐦', name: t('badgeEarlyBird'), hint: t('hintFirst'), test: function (s) { return s.earlyBirds >= 1; } },
-    { icon: '🚨', name: t('badgeBuzzer'), hint: t('hintBuzzer'), test: function (s) { return s.buzzerBeaters >= 1; } },
+    { icon: '🔥', name: t('badgeOnFire'), hint: t('hintInARow', { n: 3 }), test: function (s) { return s.streak >= 3; } },
+    { icon: '💪', name: t('badgeIronMan'), hint: t('hintLast10'), test: function (s) { return (s.last10 || 0) >= 8; } },
+    { icon: '🐦', name: t('badgeEarlyBird'), hint: t('hintEarly'), test: function (s) { return (s.early || 0) > (s.late || 0); } },
+    { icon: '🚨', name: t('badgeBuzzer'), hint: t('hintLate'), test: function (s) { return (s.late || 0) > (s.early || 0); } },
   ];
 
   let renderSeq = 0;
@@ -303,8 +307,10 @@
   }
 
   function statsHtml(s) {
-    const earned = BADGES.filter(function (b) { return b.test ? b.test(s) : s.games >= b.games; });
-    const next = BADGES.find(function (b) { return b.games && s.games < b.games; });
+    const level = LEVELS.filter(function (l) { return s.games >= l.games; }).pop();
+    const next = LEVELS.find(function (l) { return s.games < l.games; });
+    const earned = (level ? [Object.assign({ hint: tn('game', s.games) }, level)] : [])
+      .concat(BADGES.filter(function (b) { return b.test(s); }));
     return (
       '<div class="stats-grid">' +
         '<div class="stat"><b>' + s.games + '</b><span>' + t('statGames') + '</span></div>' +
@@ -312,13 +318,13 @@
         '<div class="stat"><b>' + s.bestStreak + '</b><span>' + t('statBest') + '</span></div>' +
         '<div class="stat"><b>' + s.earlyBirds + '</b><span>' + t('statFirst') + '</span></div>' +
       '</div>' +
-      '<div class="badges">' +
-        BADGES.map(function (b) {
-          const has = earned.indexOf(b) >= 0;
-          const title = b.hint || tn('game', b.games);
-          return '<span class="badge' + (has ? '' : ' locked') + '" title="' + esc(title) + '">' + b.icon + ' ' + b.name + '</span>';
-        }).join('') +
-      '</div>' +
+      (earned.length
+        ? '<div class="badges">' +
+          earned.map(function (b) {
+            return '<span class="badge" title="' + esc(b.hint) + '">' + b.icon + ' ' + b.name + '</span>';
+          }).join('') +
+          '</div>'
+        : '') +
       (next
         ? '<div class="next-goal">' + esc(tn('nextGoal', next.games - s.games, { badge: next.icon + ' ' + next.name })) + '</div>'
         : '')
