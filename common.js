@@ -97,10 +97,15 @@
       if (timer) clearTimeout(timer);
     }
     let body;
+    const raw = await res.text().catch(function () { return ''; });
     try {
-      body = await res.json();
+      body = JSON.parse(raw);
     } catch (e) {
-      throw new Error(translateError('Unexpected response from the server. Try again in a moment.'));
+      // Apps Script sends an HTML page when the script itself fails; surface its message.
+      const text = raw.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, ' ')
+        .replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
+      const detail = text ? ' (' + text.slice(0, 160) + ')' : (res.status ? ' (HTTP ' + res.status + ')' : '');
+      throw new Error(translateError('Unexpected response from the server. Try again in a moment.') + detail);
     }
     if (!body.ok) throw new Error(translateError(body.error || 'Something went wrong.'));
     return body;
