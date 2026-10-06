@@ -132,9 +132,40 @@
       (data.events.length
         ? data.events.map(eventCard).join('')
         : '<div class="card muted">' + t('noGames') + '</div>') +
+      '<div id="install-slot"></div>' +
       '<h2>' + t('yourStats') + '</h2><div class="card" id="stats-box"></div>' +
       leadersHtml(data.leaders);
     renderStatsBox();
+    renderInstall();
+  }
+
+  /* ---------- install card ---------- */
+
+  const INSTALL_KEY = 'pickup.installDismissed';
+  P.install.onChange(renderInstall);
+
+  function renderInstall() {
+    const slot = document.getElementById('install-slot');
+    if (!slot) return;
+    const mode = P.install.mode();
+    if (!mode || P.store.get(INSTALL_KEY, false)) { slot.innerHTML = ''; return; }
+    slot.innerHTML =
+      '<div class="card install-card">' +
+        '<img src="icons/icon-192.png" alt="" width="48" height="48">' +
+        '<div class="install-body"><b>' + t('installTitle') + '</b>' +
+          '<div class="small">' + (mode === 'ios' ? t('installIos') : esc(t('installText'))) + '</div>' +
+          '<div class="btn-row">' +
+            (mode === 'prompt' ? '<button class="btn primary sm" id="install-go">' + esc(t('installBtn')) + '</button>' : '') +
+            '<button class="btn sm" id="install-later">' + esc(t('installLater')) + '</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>';
+    const go = document.getElementById('install-go');
+    if (go) go.onclick = function () { P.install.run().then(renderInstall); };
+    document.getElementById('install-later').onclick = function () {
+      P.store.set(INSTALL_KEY, true);
+      renderInstall();
+    };
   }
 
   function eventCard(ev) {

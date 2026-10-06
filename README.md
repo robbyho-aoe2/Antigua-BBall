@@ -118,6 +118,16 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
 - Game **notes** and **location** show exactly as you type them, so write them bilingually if you like (e.g. "Bring a white and a dark shirt / Trae camisa blanca y oscura").
 - The admin page stays in English.
 
+### Install as an app
+
+The site can be added to a phone's home screen. It then opens full-screen with its own icon, like a normal app, with no app store and no updates to install.
+
+- **Android (Chrome):** the home page shows an **Install app** button. You can also use the browser menu → **Install app / Add to Home screen**.
+- **iPhone (Safari):** tap **Share** (square with an arrow ↑) → **Add to Home Screen**. The home page shows these steps too.
+- **Updates:** the app always loads the newest version when online. With no signal, it still opens and shows the last roster it loaded.
+- **On iPhone,** the installed app and Safari keep separate memory. If someone signed up in Safari, they can use **"Already signed up on another phone?"** once inside the app to get their spot back.
+- **To change the icon:** replace the PNGs in `icons/`. App name and colors are in `manifest.webmanifest`.
+
 ### Stats and badges
 
 Stats are tied to your email and count **past games where you made the roster**:
@@ -179,6 +189,7 @@ The Sheet is meant to be readable and editable by hand:
 | `common.js` | Shared helpers (talking to the server, formatting, language) |
 | `i18n.js` | All player-facing text in English and Spanish |
 | `style.css` | Panza Verde colors: jade green, Antigua arch yellow, terracotta, cream |
+| `manifest.webmanifest`, `sw.js`, `icons/` | Make the site installable as a phone app |
 | `config.js` | **The one file you edit:** your Apps Script URL and site name |
 | `apps-script/Code.gs` | The server code you paste into the Sheet |
 

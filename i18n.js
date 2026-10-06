@@ -90,6 +90,11 @@ window.PICKUP_STRINGS = {
     shareText: 'Hoops {date} {time} @ {loc}. Sign up:',
     linkCopied: 'Link copied. Paste it in the group chat!',
     copyLink: 'Copy this link:',
+    installTitle: '📲 Get the app',
+    installText: 'Add Pickup to your home screen to sign up in one tap.',
+    installBtn: 'Install app',
+    installIos: 'In Safari, tap <b>Share</b> (the square with an arrow ↑), then <b>Add to Home Screen</b>.',
+    installLater: 'Not now',
   },
 
   es: {
@@ -181,6 +186,11 @@ window.PICKUP_STRINGS = {
     shareText: 'Básquet {date} {time} @ {loc}. Inscríbete:',
     linkCopied: 'Enlace copiado. ¡Pégalo en el chat del grupo!',
     copyLink: 'Copia este enlace:',
+    installTitle: '📲 Instala la app',
+    installText: 'Agrega Pickup a tu pantalla de inicio para inscribirte con un toque.',
+    installBtn: 'Instalar app',
+    installIos: 'En Safari, toca <b>Compartir</b> (el cuadro con flecha ↑) y luego <b>Agregar a inicio</b>.',
+    installLater: 'Ahora no',
   },
 };
 

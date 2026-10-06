@@ -160,6 +160,51 @@
     return (a.indexOf(' ') > 0 && suffix(a) === suffix(b) ? a.slice(0, a.indexOf(' ')) : a) + ' – ' + b;
   }
 
+  /* ---------- installable app ---------- */
+
+  if ('serviceWorker' in navigator) {
+    window.addEventListener('load', function () { navigator.serviceWorker.register('sw.js').catch(function () {}); });
+  }
+
+  // Android/desktop Chrome: hold the install prompt so the page can offer its own button.
+  let installPrompt = null;
+  const installListeners = [];
+  window.addEventListener('beforeinstallprompt', function (e) {
+    e.preventDefault();
+    installPrompt = e;
+    installListeners.forEach(function (fn) { fn(); });
+  });
+  window.addEventListener('appinstalled', function () {
+    installPrompt = null;
+    installListeners.forEach(function (fn) { fn(); });
+  });
+
+  function isStandalone() {
+    return (window.matchMedia && window.matchMedia('(display-mode: standalone)').matches) || navigator.standalone === true;
+  }
+  function isIOS() {
+    return /iphone|ipad|ipod/i.test(navigator.userAgent) ||
+      (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+  }
+
+  const install = {
+    // 'prompt' (one-tap button), 'ios' (Share → Add to Home Screen), or '' (nothing to offer).
+    mode: function () {
+      if (isStandalone()) return '';
+      if (installPrompt) return 'prompt';
+      if (isIOS()) return 'ios';
+      return '';
+    },
+    run: function () {
+      if (!installPrompt) return Promise.resolve();
+      const p = installPrompt;
+      installPrompt = null;
+      p.prompt();
+      return p.userChoice.catch(function () {});
+    },
+    onChange: function (fn) { installListeners.push(fn); },
+  };
+
   /* ---------- UI bits ---------- */
 
   let toastTimer;
@@ -198,7 +243,7 @@
   }
 
   window.Pickup = {
-    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, store: store, cache: cache,
+    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, store: store, cache: cache, install: install,
     toast: toast, busy: busy, applyBranding: applyBranding,
     t: t, tn: tn, locale: locale, locations: locations, findLocation: findLocation, mapsUrl: mapsUrl, useLang: useLang, lang: function () { return lang; },
   };
