@@ -7,7 +7,7 @@
  *
  * Data lives in two tabs (created automatically):
  *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime
- *   Signups: EventID | Name | Email | SignedUpAt | Order | Token | Lang
+ *   Signups: EventID | Name | Email | SignedUpAt | Order | Token | Lang | Notify
  *
  * Players are identified by their full name (accents and capitals ignored).
  * Email is optional; when given, players get confirmation emails sent from
@@ -20,7 +20,7 @@ const TZ = 'America/Guatemala';
 const EVENTS_SHEET = 'Events';
 const SIGNUPS_SHEET = 'Signups';
 const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created', 'EndTime'];
-const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token', 'Lang'];
+const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token', 'Lang', 'Notify'];
 const DEFAULT_CAP = 15;
 const MAX_NAME = 60;
 const MAX_EMAIL = 100;
@@ -39,6 +39,7 @@ const PUBLIC_ACTIONS = {
   drop: drop,
   findSpot: findSpot,
   stats: stats,
+  setNotify: setNotify,
 };
 
 const ADMIN_ACTIONS = {
@@ -134,6 +135,8 @@ function getEvent(req) {
     mine.push({
       token: s.token,
       name: s.name,
+      hasEmail: !!s.email,
+      notify: s.notify,
       position: idx + 1,
       onRoster: idx < ev.cap,
       waitlistPosition: idx < ev.cap ? 0 : idx - ev.cap + 1,
@@ -151,6 +154,7 @@ function signup(req) {
   const name = requireFullName_(cleanName_(req.name));
   const email = cleanEmail_(req.email, false);
   const lang = cleanLang_(req.lang);
+  const notify = req.notify !== false;
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     if (ev.date < today_()) fail_('This game already happened.');
@@ -158,10 +162,10 @@ function signup(req) {
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     assertNameFree_(list, name, null);
     const token = Utilities.getUuid();
-    appendSignup_(ev.id, name, email, nextOrder_(list), token, lang);
+    appendSignup_(ev.id, name, email, nextOrder_(list), token, lang, notify);
     const position = list.length + 1;
     const onRoster = position <= ev.cap;
-    queueEmail_({ name: name, email: email, lang: lang }, ev, 'signup', { position: position, onRoster: onRoster });
+    queueEmail_({ name: name, email: email, lang: lang, notify: notify }, ev, 'signup', { position: position, onRoster: onRoster });
     return { token: token, position: position, onRoster: onRoster };
   });
 }
@@ -189,6 +193,18 @@ function drop(req) {
       queueEmail_(s, ev, 'dropped');
       return {};
     });
+  });
+}
+
+/** Turns a player's confirmation emails on or off. */
+function setNotify(req) {
+  const notify = req.notify !== false;
+  return withLock_(function () {
+    const ev = findEvent_(req.eventId);
+    const list = groupByEvent_(readSignups_())[ev.id] || [];
+    const s = findByToken_(list, req.token);
+    sheet_(SIGNUPS_SHEET).getRange(s.row, 8).setValue(notify);
+    return { notify: notify };
   });
 }
 
@@ -320,7 +336,7 @@ function adminAddSignup(req) {
     const ev = findEvent_(req.eventId);
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     assertNameFree_(list, name, null);
-    appendSignup_(ev.id, name, email, nextOrder_(list), Utilities.getUuid(), '');
+    appendSignup_(ev.id, name, email, nextOrder_(list), Utilities.getUuid(), '', true);
     const position = list.length + 1;
     queueEmail_({ name: name, email: email, lang: '' }, ev, 'signup', { position: position, onRoster: position <= ev.cap });
     return {};
@@ -454,6 +470,7 @@ function ensureSheets_() {
   const signups = ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
   // Sheets made before the Lang column existed: add its header once.
   if (signups.getRange(1, 7).getValue() === '') signups.getRange(1, 7).setValue('Lang').setFontWeight('bold');
+  if (signups.getRange(1, 8).getValue() === '') signups.getRange(1, 8).setValue('Notify').setFontWeight('bold');
 }
 
 function ensureSheet_(ss, name, headers, textColumns) {
@@ -505,6 +522,8 @@ function readSignups_() {
       order: Number(r[4]) || 0,
       token: String(r[5]).trim(),
       lang: String(r[6] || '').trim(),
+      // Blank (older rows) means yes; FALSE/no/0 turns emails off.
+      notify: !(r[7] === false || /^(false|no|0)$/i.test(String(r[7]).trim())),
     };
   }).filter(function (s) { return s.eventId && s.name; });
 }
@@ -517,8 +536,8 @@ function fillMissingTokens_() {
   });
 }
 
-function appendSignup_(eventId, name, email, order, token, lang) {
-  sheet_(SIGNUPS_SHEET).appendRow([eventId, name, email, new Date(), order, token, lang || '']);
+function appendSignup_(eventId, name, email, order, token, lang, notify) {
+  sheet_(SIGNUPS_SHEET).appendRow([eventId, name, email, new Date(), order, token, lang || '', notify !== false]);
 }
 
 function groupByEvent_(signups) {
@@ -724,7 +743,7 @@ let OUTBOX = [];
 // Emails are collected while the sheet is locked and sent after, so a slow
 // send never holds up other players.
 function queueEmail_(s, ev, kind, extra) {
-  if (!SEND_EMAILS || !s.email || ev.date < today_()) return;
+  if (!SEND_EMAILS || !s.email || s.notify === false || ev.date < today_()) return;
   OUTBOX.push({ to: s.email, name: s.name, lang: s.lang, ev: ev, kind: kind, extra: extra || {} });
 }
 

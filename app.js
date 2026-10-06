@@ -386,6 +386,10 @@
       '<div class="card me-card' + (m.onRoster ? '' : ' waitlisted') + '" data-token="' + esc(m.token) + '">' +
         '<div class="big">' + title + '</div>' +
         '<div class="small">' + sub + '</div>' +
+        (!ev.past && m.hasEmail
+          ? '<div class="notify-line small">' + (m.notify ? t('notifyOn') : t('notifyOff')) +
+            ' · <button class="linkish small" data-act="notify">' + (m.notify ? t('turnOff') : t('turnOn')) + '</button></div>'
+          : '') +
         (ev.past ? '' :
           '<div class="btn-row">' +
             '<button class="btn" data-act="edit">' + t('editName') + '</button>' +
@@ -413,6 +417,7 @@
         '<label for="su-email' + sfx + '">' + t('emailOptional') + '</label>' +
         '<p class="email-why">' + t('emailWhy') + '</p>' +
         '<input id="su-email' + sfx + '" name="email" type="email" inputmode="email" autocomplete="email" maxlength="100" value="' + esc(m.email || '') + '">' +
+        '<label class="check notify-check"><input type="checkbox" name="notify" checked><span>' + t('notifyCheck') + '</span></label>' +
         '<button class="btn primary block" type="submit">' + (full ? t('joinWaitlist') : (other ? t('signThemUp') : t('signMeUp'))) + '</button>' +
         (full ? '<p class="hint">' + t('fullHint') + '</p>' : '') +
       '</form>'
@@ -471,14 +476,15 @@
         if (name.split(' ').length < 2) return P.toast(t('fullNameNeeded'), true);
         P.busy(form.querySelector('button[type=submit]'), async function () {
           try {
-            const r = await P.api('signup', { eventId: ev.id, name: name, email: email, lang: P.lang() });
+            const notify = field(form, 'notify').checked;
+            const r = await P.api('signup', { eventId: ev.id, name: name, email: email, lang: P.lang(), notify: notify });
             addToken(ev.id, r.token);
             // Remember who "me" is (for stats and prefill) only from your own signup.
             if (!other) setMe({ name: name, email: email.toLowerCase() });
             else if (email && !me().email) setMe({ email: email.toLowerCase() });
             applyLocal(function (d) {
               d.waitlist.push({ name: name });
-              d.mine.push({ token: r.token, name: name });
+              d.mine.push({ token: r.token, name: name, hasEmail: !!email, notify: notify });
             });
             P.toast(r.onRoster
               ? (other ? t('toastInThem', { name: name, n: r.position }) : t('toastInYou', { n: r.position }))
@@ -547,6 +553,21 @@
           }
         });
       };
+      const notifyBtn = card.querySelector('[data-act="notify"]');
+      if (notifyBtn) {
+        notifyBtn.onclick = function (e) {
+          const want = !m.notify;
+          P.busy(e.currentTarget, async function () {
+            try {
+              await P.api('setNotify', { eventId: ev.id, token: token, notify: want });
+              applyLocal(function (d) { d.mine.forEach(function (x) { if (x.token === token) x.notify = want; }); });
+              P.toast(want ? t('notifyOn') : t('notifyOff'));
+            } catch (err) {
+              P.toast(err.message, true);
+            }
+          });
+        };
+      }
       card.querySelector('[data-act="drop"]').onclick = function (e) {
         if (!confirm(t('confirmDrop', { name: m.name }) + (m.onRoster ? t('confirmDropRoster') : ''))) return;
         P.busy(e.currentTarget, async function () {

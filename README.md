@@ -110,11 +110,13 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
 - **Players are tracked by full name.** Capitals, accents and extra spaces are ignored, so "José Pérez" and "jose perez" are the same person. The same name can't sign up twice for one game. Names typed all in lowercase get capitalized automatically.
 - **Signing up someone else:** after signing up, tap **"+ Sign up someone else (e.g. your kid)"** and enter their full name. Email is optional there too; a parent can use their own.
 - **Edit name / drop out:** the phone remembers your signup, so you'll see "You're signed up – #7 [Edit name] [Drop out]". On a different phone, use **"Already signed up on another phone?"** and enter your full name and email. This only works if you gave an email; otherwise ask the organizer.
-- **Confirmation emails** (only for players who gave an email), sent from your Gmail in the player's language, or bilingual if unknown:
+- **Confirmation emails** (only for players who gave an email and left **"Email me updates about this game"** ticked), sent from your Gmail in the player's language, or bilingual if unknown:
   - signed up (roster spot, or waitlist position)
   - "A spot opened up, you're in!" when moving up from the waitlist
   - "Moved to the waitlist" if a reorder or a smaller roster size bumps them
   - dropped out, or removed by the organizer
+
+  Players can switch emails on or off any time from their "You're signed up" card (🔔 / 🔕). You can also change the **Notify** column (TRUE/FALSE) in the Sheet.
 
   Gmail allows about 100 recipients a day, which is plenty for this group. To turn emails off, set `SEND_EMAILS = false` near the top of `Code.gs` and redeploy.
 - **Waitlist:** if someone on the roster drops, the first person on the waitlist moves up automatically.
@@ -175,7 +177,7 @@ The Sheet is meant to be readable and editable by hand:
 
 **Signups tab**
 
-| EventID | Name | Email | SignedUpAt | Order | Token | Lang |
+| EventID | Name | Email | SignedUpAt | Order | Token | Lang | Notify |
 |---|---|---|---|---|---|
 
 - The list is sorted by **Order** (1, 2, 3…). To reorder by hand, change the numbers. Rows with a blank Order go to the end.
