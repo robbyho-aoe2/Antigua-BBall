@@ -28,6 +28,7 @@ const MAX_NAME = 40;
 const MAX_EMAIL = 100;
 const MAX_PER_EMAIL = 2; // the player plus one family member (e.g. a parent signing up their kid)
 const LEADERBOARD_SIZE = 10;
+const PAST_GAMES_SHOWN = 8; // most recent past games listed on the home page
 
 const SEND_EMAILS = true;
 const SITE_NAME = 'Antigua Pickup';
@@ -122,7 +123,12 @@ function listEvents() {
     .filter(function (ev) { return ev.date >= today; })
     .sort(byWhen_)
     .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
-  return { events: upcoming, leaders: leaderboard_(computeStats_(events, signups)) };
+  const past = events
+    .filter(function (ev) { return ev.date < today; })
+    .sort(function (a, b) { return byWhen_(b, a); })
+    .slice(0, PAST_GAMES_SHOWN)
+    .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
+  return { events: upcoming, past: past, leaders: leaderboard_(computeStats_(events, signups)) };
 }
 
 function getEvent(req) {

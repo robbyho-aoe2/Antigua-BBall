@@ -128,54 +128,21 @@
 
   function renderHome(data) {
     app.innerHTML =
-      '<div id="account-slot"></div>' +
       '<h2>' + t('upcoming') + '</h2>' +
       (data.events.length
         ? data.events.map(eventCard).join('')
         : '<div class="card muted">' + t('noGames') + '</div>') +
       '<div id="install-slot"></div>' +
-      '<h2>' + t('yourStats') + '</h2><div class="card" id="stats-box"></div>' +
+      '<h2>' + t('yourProfile') + '</h2><div class="card" id="stats-box"></div>' +
+      pastHtml(data.past) +
       leadersHtml(data.leaders);
-    renderAccount();
     renderStatsBox();
     renderInstall();
   }
 
-  /* ---------- "you" card: who this phone is signed up as, and email updates ---------- */
-
-  function renderAccount() {
-    const slot = document.getElementById('account-slot');
-    if (!slot) return;
-    const m = me();
-    if (!m.email) {
-      slot.innerHTML = '<div class="card account muted small">👤 ' + t('accountNone') + '</div>';
-      return;
-    }
-    const on = m.notify !== false; // everyone gets emails unless they opted out
-    slot.innerHTML =
-      '<div class="card account">' +
-        '<div class="account-who">👤 <b>' + esc(m.name || '') + '</b> <span class="muted small">' + esc(m.email) + '</span></div>' +
-        '<div class="notify-line small">' + (on ? t('notifyOn') : t('notifyOff')) +
-          ' · <button class="linkish small" id="account-notify">' + (on ? t('turnOff') : t('turnOn')) + '</button>' +
-          ' · <button class="linkish small" id="account-switch">' + t('notYouShort') + '</button>' +
-        '</div>' +
-      '</div>';
-    document.getElementById('account-notify').onclick = function (e) {
-      P.busy(e.currentTarget, async function () {
-        try {
-          await setNotifyAnywhere(!on);
-          P.toast(!on ? t('notifyOnAll') : t('notifyOffAll'));
-        } catch (err) {
-          P.toast(err.message, true);
-        }
-        renderAccount();
-      });
-    };
-    document.getElementById('account-switch').onclick = function () {
-      setMe({ name: '', email: '', notify: undefined });
-      renderAccount();
-      renderStatsBox();
-    };
+  function pastHtml(past) {
+    if (!past || !past.length) return '';
+    return '<h2>' + t('pastGames') + '</h2>' + past.map(eventCard).join('');
   }
 
   // The server changes the choice for whoever owns a signup, so use any signup this phone remembers.
@@ -233,7 +200,7 @@
     const pct = Math.min(100, Math.round((ev.filled / ev.cap) * 100));
     const mine = tokensFor(ev.id).length > 0;
     return (
-      '<a class="card event-card" data-nav href="?event=' + encodeURIComponent(ev.id) + '">' +
+      '<a class="card event-card' + (ev.past ? ' past-card' : '') + '" data-nav href="?event=' + encodeURIComponent(ev.id) + '">' +
         '<div class="date-badge">' +
           '<span class="dow">' + d.toLocaleDateString(P.locale(), { weekday: 'short' }).replace('.', '').toUpperCase() + '</span>' +
           '<span class="day">' + d.getDate() + '</span>' +
@@ -242,12 +209,14 @@
         '<div class="ec-body">' +
           '<div class="ec-title">' + esc(P.fmtTimeRange(ev.time, ev.endTime)) + '</div>' +
           '<div class="ec-loc">' + esc(ev.location) + '</div>' +
-          '<div class="meter' + (ev.filled >= ev.cap ? ' full' : '') + '"><span style="width:' + pct + '%"></span></div>' +
+          (ev.past ? '' : '<div class="meter' + (ev.filled >= ev.cap ? ' full' : '') + '"><span style="width:' + pct + '%"></span></div>') +
           '<div class="ec-meta">' +
-            '<span><span class="count">' + ev.filled + '/' + ev.cap + '</span> ' + t('inCount') + '</span>' +
-            (ev.waitlist ? '<span class="pill wait">' + t('waitlistCount', { n: ev.waitlist }) + '</span>' : '') +
-            (!ev.open ? '<span class="pill closed">' + t('closed') + '</span>' : '') +
-            (mine ? '<span class="pill me">' + t('signedUpPill') + '</span>' : '') +
+            (ev.past
+              ? '<span><span class="count">' + ev.filled + '</span> ' + t('playedCount') + '</span>'
+              : '<span><span class="count">' + ev.filled + '/' + ev.cap + '</span> ' + t('inCount') + '</span>' +
+                (ev.waitlist ? '<span class="pill wait">' + t('waitlistCount', { n: ev.waitlist }) + '</span>' : '') +
+                (!ev.open ? '<span class="pill closed">' + t('closed') + '</span>' : '')) +
+            (mine ? '<span class="pill me">' + (ev.past ? t('youPlayedPill') : t('signedUpPill')) + '</span>' : '') +
           '</div>' +
         '</div>' +
         '<span class="chev" aria-hidden="true">›</span>' +
@@ -271,12 +240,14 @@
 
   /* ---------- stats ---------- */
 
+  // Profile card: who this phone is signed up as, email updates on/off, then stats and badges.
   function renderStatsBox() {
     const box = document.getElementById('stats-box');
     if (!box) return;
-    const email = me().email;
-    if (!email) {
+    const m = me();
+    if (!m.email) {
       box.innerHTML =
+        '<p class="small muted" style="margin-top:0">👤 ' + t('accountNone') + '</p>' +
         '<form id="stats-form">' +
           '<label for="st-email">' + t('statsPrompt') + '</label>' +
           '<input id="st-email" name="email" type="email" inputmode="email" autocomplete="email" placeholder="you@example.com" required>' +
@@ -291,23 +262,43 @@
       };
       return;
     }
-    const paint = function (stats) {
-      box.innerHTML =
-        (stats.name ? '<div><b>' + esc(stats.name) + '</b></div>' : '') +
-        statsHtml(stats) +
-        '<button class="linkish small" id="not-me">' + t('notYou') + '</button>';
-      document.getElementById('not-me').onclick = function () { setMe({ name: '', email: '', notify: undefined }); renderAccount(); renderStatsBox(); };
+    const on = m.notify !== false; // everyone gets emails unless they opted out
+    const head = function (name) {
+      return (
+        '<div class="account-who">👤 <b>' + esc(m.name || name || '') + '</b> <span class="muted small">' + esc(m.email) + '</span></div>' +
+        '<div class="notify-line small">' + (on ? t('notifyOn') : t('notifyOff')) +
+          ' · <button class="linkish small" data-act="notify">' + (on ? t('turnOff') : t('turnOn')) + '</button>' +
+          ' · <button class="linkish small" data-act="switch">' + t('notYouShort') + '</button>' +
+        '</div>'
+      );
     };
-    const cachedStats = P.cache.get('stats.' + email);
-    if (cachedStats) paint(cachedStats);
-    else box.innerHTML = '<div class="muted small">' + t('loadingStats') + '</div>';
-    getStats(email).then(function (r) {
+    const wire = function () {
+      box.querySelector('[data-act="notify"]').onclick = function (e) {
+        P.busy(e.currentTarget, async function () {
+          try {
+            await setNotifyAnywhere(!on);
+            P.toast(!on ? t('notifyOnAll') : t('notifyOffAll'));
+          } catch (err) {
+            P.toast(err.message, true);
+          }
+          renderStatsBox();
+        });
+      };
+      box.querySelector('[data-act="switch"]').onclick = function () {
+        setMe({ name: '', email: '', notify: undefined });
+        renderStatsBox();
+      };
+    };
+    const paint = function (stats, note) {
+      box.innerHTML = head(stats && stats.name) + (stats ? statsHtml(stats) : note || '');
+      wire();
+    };
+    const cachedStats = P.cache.get('stats.' + m.email);
+    paint(cachedStats, '<div class="muted small" style="margin-top:10px">' + t('loadingStats') + '</div>');
+    getStats(m.email).then(function (r) {
       if (box.isConnected && !same(cachedStats, r.stats)) paint(r.stats);
     }).catch(function (e) {
-      if (!box.isConnected || cachedStats) return;
-      box.innerHTML = '<div class="error-box small">' + esc(e.message) + '</div>' +
-        '<button class="linkish small" id="not-me">' + t('useDifferent') + '</button>';
-      document.getElementById('not-me').onclick = function () { setMe({ name: '', email: '', notify: undefined }); renderAccount(); renderStatsBox(); };
+      if (box.isConnected && !cachedStats) paint(null, '<div class="error-box small" style="margin-top:10px">' + esc(e.message) + '</div>');
     });
   }
 
