@@ -75,14 +75,30 @@
 
   // Apps Script can't answer CORS preflight requests, so the body is sent as
   // text/plain (fetch's default for a string body), which skips the preflight.
+  // Loading data is safe to repeat, so it retries when Google drops or stalls a request.
+  // Changes (sign up, drop, save…) never retry automatically, so nothing happens twice.
+  const READ_ONLY = ['listEvents', 'getEvent', 'stats', 'adminLogin', 'adminListEvents', 'adminGetEvent'];
+  const RETRY_DELAYS = [1500, 4000];
+
   async function api(action, data) {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        return await apiOnce(action, data);
+      } catch (e) {
+        if (!e.retryable || READ_ONLY.indexOf(action) < 0 || attempt >= RETRY_DELAYS.length) throw e;
+        await new Promise(function (r) { setTimeout(r, RETRY_DELAYS[attempt]); });
+      }
+    }
+  }
+
+  async function apiOnce(action, data) {
     if (!CFG.API_URL || CFG.API_URL.indexOf('PASTE_') === 0) {
       throw new Error('This site is not connected yet: paste your Apps Script URL into config.js.');
     }
     let res;
-    // Never spin forever: give up after 30 seconds.
+    // Never spin forever: give up after 45 seconds.
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctrl && setTimeout(function () { ctrl.abort(); }, 30000);
+    const timer = ctrl && setTimeout(function () { ctrl.abort(); }, 45000);
     try {
       res = await fetch(CFG.API_URL, {
         method: 'POST',
@@ -90,9 +106,11 @@
         signal: ctrl ? ctrl.signal : undefined,
       });
     } catch (e) {
-      throw new Error(translateError(e && e.name === 'AbortError'
+      const err = new Error(translateError(e && e.name === 'AbortError'
         ? 'The server took too long to answer. Please try again.'
         : 'Could not reach the server. Check your connection and try again.'));
+      err.retryable = true;
+      throw err;
     } finally {
       if (timer) clearTimeout(timer);
     }
@@ -105,7 +123,9 @@
       const text = raw.replace(/<style[\s\S]*?<\/style>|<script[\s\S]*?<\/script>/gi, ' ')
         .replace(/<[^>]+>/g, ' ').replace(/&[a-z#0-9]+;/gi, ' ').replace(/\s+/g, ' ').trim();
       const detail = text ? ' (' + text.slice(0, 160) + ')' : (res.status ? ' (HTTP ' + res.status + ')' : '');
-      throw new Error(translateError('Unexpected response from the server. Try again in a moment.') + detail);
+      const err = new Error(translateError('Unexpected response from the server. Try again in a moment.') + detail);
+      err.retryable = true; // Google sometimes sends a temporary error page
+      throw err;
     }
     if (!body.ok) throw new Error(translateError(body.error || 'Something went wrong.'));
     return body;
