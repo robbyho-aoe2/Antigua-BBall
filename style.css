@@ -160,7 +160,7 @@ h2:first-child { margin-top: 4px; }
 
 .banner { padding: 12px 14px; border-radius: 10px; background: var(--terracotta-100); color: var(--terracotta); font-weight: 600; margin-bottom: 12px; }
 
-.list-section h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 20px 0 8px; font-size: 17px; color: var(--jade-900); }
+.list-section h3 { display: flex; justify-content: space-between; align-items: baseline; margin: 16px 0 6px; font-size: 17px; color: var(--jade-900); }
 ol.names { list-style: none; margin: 0; padding: 0; background: #fff; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 ol.names li { display: flex; align-items: center; gap: 12px; padding: 11px 14px; border-top: 1px solid var(--line); min-height: 46px; }
 ol.names li:first-child { border-top: 0; }
@@ -168,6 +168,12 @@ ol.names .n { flex: none; width: 28px; height: 28px; border-radius: 50%; backgro
 ol.names.wait .n { background: var(--ochre-100); color: #8a5d00; }
 ol.names li.is-me { background: var(--ochre-100); font-weight: 700; }
 ol.names li.empty { color: var(--stone); justify-content: center; }
+/* Two-column roster/waitlist: thin grid lines come from the 1px gap over the line color. */
+ol.names.cols { display: grid; grid-template-columns: 1fr 1fr; grid-auto-flow: column; gap: 1px; background: var(--line); }
+ol.names.cols li { border-top: 0; background: #fff; padding: 7px 10px; min-height: 40px; gap: 8px; font-size: 15px; min-width: 0; }
+ol.names.cols li.is-me { background: var(--ochre-100); }
+ol.names.cols .n { width: 24px; height: 24px; font-size: 12px; }
+ol.names .nm { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 ol.names li.divider { background: var(--ochre-100); color: #8a5d00; font-weight: 700; font-size: 13px; text-transform: uppercase; letter-spacing: .5px; min-height: 0; padding: 6px 14px; }
 
 /* ---------- Forms & buttons ---------- */

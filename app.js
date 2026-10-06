@@ -336,9 +336,9 @@
       if (!mine.length) html += findSpotHtml();
     }
 
-    if (mine.length) html += '<div class="card" id="my-stats"><div class="muted small">Loading your stats…</div></div>';
 
     html += listsHtml(ev, data, mine);
+    if (mine.length) html += '<div class="card" id="my-stats" style="margin-top:16px"><div class="muted small">' + t('loadingStats') + '</div></div>';
     app.innerHTML = html;
     wireEvent(ev, mine);
   }
@@ -403,16 +403,21 @@
     const myNames = mine.map(function (m) { return m.name.toLowerCase(); });
     const item = function (p, i) {
       const isMe = myNames.indexOf(p.name.toLowerCase()) >= 0;
-      return '<li' + (isMe ? ' class="is-me"' : '') + '><span class="n">' + (i + 1) + '</span><span>' + esc(p.name) + (isMe ? ' ' + t('you') : '') + '</span></li>';
+      return '<li' + (isMe ? ' class="is-me"' : '') + '><span class="n">' + (i + 1) + '</span><span class="nm">' + esc(p.name) + (isMe ? ' ' + t('you') : '') + '</span></li>';
+    };
+    // Two columns, numbered down the left column first (1–8 | 9–15).
+    const cols = function (list, cls) {
+      const rows = Math.ceil(list.length / 2);
+      return '<ol class="names cols' + (cls ? ' ' + cls : '') + '" style="grid-template-rows:repeat(' + rows + ',auto)">' +
+        list.map(item).join('') + (list.length % 2 ? '<li class="filler" aria-hidden="true"></li>' : '') + '</ol>';
     };
     let html =
       '<section class="list-section"><h3>' + t('roster') + ' <span class="count">' + ev.filled + '/' + ev.cap + '</span></h3>' +
-      '<ol class="names">' +
-      (data.roster.length ? data.roster.map(item).join('') : '<li class="empty">' + t('noOneYet') + '</li>') +
-      '</ol></section>';
+      (data.roster.length ? cols(data.roster) : '<ol class="names"><li class="empty">' + t('noOneYet') + '</li></ol>') +
+      '</section>';
     if (data.waitlist.length) {
       html += '<section class="list-section"><h3>' + t('waitlist') + ' <span class="count">' + data.waitlist.length + '</span></h3>' +
-        '<ol class="names wait">' + data.waitlist.map(item).join('') + '</ol></section>';
+        cols(data.waitlist, 'wait') + '</section>';
     }
     return html;
   }
