@@ -86,12 +86,17 @@ function doGet() {
 }
 
 function doPost(e) {
+  const started = Date.now();
+  let action = '';
   try {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    const action = String(req.action || '');
-    ensureSheets_();
+    action = String(req.action || '');
     OUTBOX = [];
     PLAYERS = null;
+    EVENTS_MEMO = null;
+    SIGNUPS_MEMO = null;
+    VERSION = null;
+    ensureSheetsOnce_();
     let result;
     if (Object.prototype.hasOwnProperty.call(PUBLIC_ACTIONS, action)) {
       result = PUBLIC_ACTIONS[action](req);
@@ -101,13 +106,78 @@ function doPost(e) {
     } else {
       fail_('Unknown action.');
     }
+    const emails = OUTBOX.length;
     flushEmails_();
+    // Shows in Apps Script → Executions, to spot slow requests.
+    console.log(action + ' took ' + (Date.now() - started) + ' ms' + (emails ? ' (' + emails + ' email' + (emails > 1 ? 's' : '') + ')' : ''));
     return json_(Object.assign({ ok: true }, result));
   } catch (err) {
     OUTBOX = [];
     if (!err.isUserError) console.error(err && err.stack ? err.stack : err);
+    console.log(action + ' failed after ' + (Date.now() - started) + ' ms');
     return json_({ ok: false, error: err.isUserError ? err.message : 'Server error: ' + err.message });
   }
+}
+
+/* ------------------------------------------------------------------ */
+/* Speed: skip repeat work and reuse recent answers                    */
+/* ------------------------------------------------------------------ */
+
+const SCHEMA_VERSION = '5'; // bump when tabs or columns change
+
+let EVENTS_MEMO = null;  // this request's copy of the Events tab
+let SIGNUPS_MEMO = null; // this request's copy of the Signups tab
+let VERSION = null;
+
+function cache_() { return CacheService.getScriptCache(); }
+
+/** Checks the tabs and headers once every few hours instead of on every request. */
+function ensureSheetsOnce_() {
+  if (cache_().get('schema') === SCHEMA_VERSION) return;
+  ensureSheets_();
+  cache_().put('schema', SCHEMA_VERSION, 21600);
+}
+
+/** Changes on every write, so cached answers from before a change are never used. */
+function dataVersion_() {
+  if (VERSION) return VERSION;
+  VERSION = cache_().get('v');
+  if (!VERSION) {
+    VERSION = String(Date.now());
+    cache_().put('v', VERSION, 21600);
+  }
+  return VERSION;
+}
+
+function bumpVersion_() {
+  VERSION = String(Date.now()) + Math.random().toString(36).slice(2, 6);
+  cache_().put('v', VERSION, 21600);
+}
+
+/** Forget this request's copies after writing to the sheet. */
+function invalidate_() {
+  EVENTS_MEMO = null;
+  SIGNUPS_MEMO = null;
+}
+
+/**
+ * Reuses a recent answer if nothing has changed since. Edits made directly in the
+ * Sheet show up once the short TTL runs out (about a minute).
+ */
+function cached_(key, ttlSeconds, compute) {
+  const fullKey = key + ':' + dataVersion_();
+  const hit = cache_().get(fullKey);
+  if (hit) return JSON.parse(hit);
+  const value = compute();
+  try {
+    const str = JSON.stringify(value);
+    if (str.length < 90000) cache_().put(fullKey, str, ttlSeconds);
+  } catch (err) { /* caching is best-effort */ }
+  return value;
+}
+
+function statsMap_() {
+  return cached_('stats', 120, function () { return computeStats_(readEvents_(), readSignups_()); });
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,21 +185,31 @@ function doPost(e) {
 /* ------------------------------------------------------------------ */
 
 function listEvents() {
-  const today = today_();
-  const events = readEvents_();
-  const signups = readSignups_();
-  const groups = groupByEvent_(signups);
-  const upcoming = events
-    .filter(function (ev) { return ev.date >= today; })
-    .sort(byWhen_)
-    .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
-  return { events: upcoming, leaders: leaderboard_(computeStats_(events, signups)) };
+  return cached_('list:' + today_(), 60, function () {
+    const today = today_();
+    const groups = groupByEvent_(readSignups_());
+    const upcoming = readEvents_()
+      .filter(function (ev) { return ev.date >= today; })
+      .sort(byWhen_)
+      .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
+    return { events: upcoming, leaders: leaderboard_(statsMap_()) };
+  });
 }
 
 function getEvent(req) {
   const today = today_();
-  const ev = findEvent_(req.eventId);
-  const list = groupByEvent_(readSignups_())[ev.id] || [];
+  const id = String(req.eventId || '').trim();
+  const base = cached_('ev:' + id, 60, function () {
+    const e = findEvent_(id);
+    return {
+      ev: e,
+      list: (groupByEvent_(readSignups_())[e.id] || []).map(function (s) {
+        return { name: s.name, email: s.email, notify: s.notify, token: s.token };
+      }),
+    };
+  });
+  const ev = base.ev;
+  const list = base.list;
   const names = list.map(function (s) { return { name: s.name }; });
   // The device sends the tokens it remembers (usually one; two if a parent also signed up their kid).
   const tokens = [].concat(req.tokens || []).map(String).filter(Boolean);
@@ -230,15 +310,13 @@ function findSpot(req) {
 }
 
 function stats(req) {
-  const signups = readSignups_();
   let key = req.name ? nameKey_(cleanName_(req.name)) : '';
   if (!key && req.token) {
-    const s = signups.find(function (x) { return x.token === String(req.token); });
+    const s = readSignups_().find(function (x) { return x.token === String(req.token); });
     if (s) key = nameKey_(s.name);
   }
   if (!key) fail_('Enter your full name to see your stats.');
-  const all = computeStats_(readEvents_(), signups);
-  const p = all[key] || emptyStats_();
+  const p = statsMap_()[key] || emptyStats_();
   return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters } };
 }
 
@@ -256,7 +334,7 @@ function adminListEvents() {
 }
 
 function adminGetEvent(req) {
-  return withLock_(function () {
+  return withLock_({ readOnly: true }, function () {
     const ev = findEvent_(req.eventId);
     fillMissingTokens_();
     const list = groupByEvent_(readSignups_())[ev.id] || [];
@@ -467,7 +545,12 @@ function leaderboard_(players) {
 /* ------------------------------------------------------------------ */
 
 function sheet_(name) {
-  return SpreadsheetApp.getActive().getSheetByName(name);
+  let sh = SpreadsheetApp.getActive().getSheetByName(name);
+  if (!sh) { // a tab was deleted or renamed: recreate it
+    ensureSheets_();
+    sh = SpreadsheetApp.getActive().getSheetByName(name);
+  }
+  return sh;
 }
 
 function ensureSheets_() {
@@ -548,6 +631,12 @@ function ensureSheet_(ss, name, headers, textColumns) {
 }
 
 function readEvents_() {
+  if (EVENTS_MEMO) return EVENTS_MEMO;
+  EVENTS_MEMO = readEventsFresh_();
+  return EVENTS_MEMO;
+}
+
+function readEventsFresh_() {
   const sh = sheet_(EVENTS_SHEET);
   const n = sh.getLastRow() - 1;
   if (n < 1) return [];
@@ -572,6 +661,12 @@ function readEvents_() {
 }
 
 function readSignups_() {
+  if (SIGNUPS_MEMO) return SIGNUPS_MEMO;
+  SIGNUPS_MEMO = readSignupsFresh_();
+  return SIGNUPS_MEMO;
+}
+
+function readSignupsFresh_() {
   const sh = sheet_(SIGNUPS_SHEET);
   const n = sh.getLastRow() - 1;
   if (n < 1) return [];
@@ -594,9 +689,11 @@ function readSignups_() {
 /** Rows typed into the sheet by hand have no token; give them one so admin tools can target them. */
 function fillMissingTokens_() {
   const sh = sheet_(SIGNUPS_SHEET);
+  let wrote = false;
   readSignups_().forEach(function (s) {
-    if (!s.token) sh.getRange(s.row, 6).setValue(Utilities.getUuid());
+    if (!s.token) { sh.getRange(s.row, 6).setValue(Utilities.getUuid()); wrote = true; }
   });
+  if (wrote) { invalidate_(); bumpVersion_(); }
 }
 
 function appendSignup_(eventId, name, email, order, token, lang, notify) {
@@ -651,6 +748,7 @@ function withRosterWatch_(eventId, change) {
   const evBefore = findEvent_(eventId);
   const before = groupByEvent_(readSignups_())[eventId] || [];
   const result = change(before, evBefore);
+  invalidate_();
   const ev = findEvent_(eventId);
   if (SEND_EMAILS && ev.date >= today_()) {
     const wasOn = {};
@@ -699,12 +797,18 @@ function checkAdmin_(password) {
   }
 }
 
-function withLock_(fn) {
+function withLock_(opts, fn) {
+  if (typeof opts === 'function') { fn = opts; opts = {}; }
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) fail_('Lots of people signing up right now. Please try again.');
   try {
+    invalidate_(); // read fresh data once we hold the lock
     const result = fn();
-    SpreadsheetApp.flush();
+    if (!opts.readOnly) {
+      SpreadsheetApp.flush();
+      invalidate_();
+      bumpVersion_();
+    }
     return result;
   } finally {
     lock.releaseLock();
@@ -815,9 +919,11 @@ function queueEmail_(s, ev, kind, extra) {
 function flushEmails_() {
   const box = OUTBOX;
   OUTBOX = [];
+  if (!box.length) return;
+  let quota = MailApp.getRemainingDailyQuota();
   box.forEach(function (m) {
     try {
-      if (MailApp.getRemainingDailyQuota() < 1) return console.warn('Daily email quota used up; skipped ' + m.kind);
+      if (quota-- < 1) return console.warn('Daily email quota used up; skipped ' + m.kind);
       const c = composeEmail_(m);
       MailApp.sendEmail({ to: m.to, subject: c.subject, htmlBody: c.html, body: c.text, name: SITE_NAME });
     } catch (err) {

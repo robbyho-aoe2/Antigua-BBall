@@ -193,6 +193,12 @@ The Sheet is meant to be readable and editable by hand:
 
 ---
 
+## Speed
+
+- Google takes about 1–2 seconds to start the script on each request. That part can't be changed.
+- To keep the rest fast, the script keeps a short-term copy of the games list, rosters and stats in Google's cache. Every sign-up, drop or admin change clears it immediately. **Edits you make directly in the Sheet show up within about a minute.**
+- To see how long requests take, open Apps Script → **Executions** (left sidebar) and open one: it logs e.g. `getEvent took 850 ms`. Sending a confirmation email adds about a second to that request.
+
 ## Safety notes
 
 - **Simultaneous signups:** Apps Script's `LockService` makes sure two people can't both grab spot 15 at the same instant.
