@@ -198,6 +198,7 @@ window.PICKUP_ERRORS_ES = [
   [/^Name is too long \(max (\d+) characters\)\.$/, 'El nombre es muy largo (máximo $1 caracteres).'],
   [/^Enter your email\.$/, 'Escribe tu correo.'],
   [/^That email doesn't look right\.$/, 'Ese correo no parece válido.'],
+  [/^The server took too long to answer\..*$/, 'El servidor tardó demasiado en responder. Intenta de nuevo.'],
   [/^Could not reach the server\..*$/, 'No se pudo conectar con el servidor. Revisa tu conexión e intenta de nuevo.'],
   [/^Unexpected response from the server\..*$/, 'Respuesta inesperada del servidor. Intenta de nuevo en un momento.'],
   [/^Something went wrong\.$/, 'Algo salió mal.'],

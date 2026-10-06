@@ -80,13 +80,21 @@
       throw new Error('This site is not connected yet: paste your Apps Script URL into config.js.');
     }
     let res;
+    // Never spin forever: give up after 30 seconds.
+    const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
+    const timer = ctrl && setTimeout(function () { ctrl.abort(); }, 30000);
     try {
       res = await fetch(CFG.API_URL, {
         method: 'POST',
         body: JSON.stringify(Object.assign({ action: action }, data || {})),
+        signal: ctrl ? ctrl.signal : undefined,
       });
     } catch (e) {
-      throw new Error(translateError('Could not reach the server. Check your connection and try again.'));
+      throw new Error(translateError(e && e.name === 'AbortError'
+        ? 'The server took too long to answer. Please try again.'
+        : 'Could not reach the server. Check your connection and try again.'));
+    } finally {
+      if (timer) clearTimeout(timer);
     }
     let body;
     try {

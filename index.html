@@ -9,7 +9,7 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏀</text></svg>">
   <link rel="preconnect" href="https://script.google.com" crossorigin>
   <link rel="preconnect" href="https://script.googleusercontent.com" crossorigin>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=20261006">
 </head>
 <body>
   <header class="site-header">
@@ -33,9 +33,18 @@
 
   <footer><a href="admin.html">Admin</a></footer>
 
-  <script src="config.js"></script>
-  <script src="i18n.js"></script>
-  <script src="common.js"></script>
-  <script src="app.js"></script>
+  <script>
+    // If a script fails to load or crashes, say so instead of showing "Loading…" forever.
+    window.addEventListener('error', function () {
+      var app = document.getElementById('app');
+      if (app && app.querySelector('.loading')) {
+        app.innerHTML = '<div class="error-box">The page didn\'t load properly. Please refresh. / La página no cargó bien. Recarga la página.</div>';
+      }
+    }, true);
+  </script>
+  <script src="config.js?v=20261006"></script>
+  <script src="i18n.js?v=20261006"></script>
+  <script src="common.js?v=20261006"></script>
+  <script src="app.js?v=20261006"></script>
 </body>
 </html>
