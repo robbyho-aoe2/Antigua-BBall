@@ -75,27 +75,14 @@
 
   // Apps Script can't answer CORS preflight requests, so the body is sent as
   // text/plain (fetch's default for a string body), which skips the preflight.
-  // Loading data is safe to repeat, so these retry once on a timeout or dropped connection.
-  // Sign-ups and other changes never retry automatically (no accidental double sign-ups).
-  const READ_ONLY = ['listEvents', 'getEvent', 'stats', 'adminLogin', 'adminListEvents', 'adminGetEvent'];
-
   async function api(action, data) {
-    try {
-      return await apiOnce(action, data);
-    } catch (e) {
-      if (!e.retryable || READ_ONLY.indexOf(action) < 0) throw e;
-      return apiOnce(action, data);
-    }
-  }
-
-  async function apiOnce(action, data) {
     if (!CFG.API_URL || CFG.API_URL.indexOf('PASTE_') === 0) {
       throw new Error('This site is not connected yet: paste your Apps Script URL into config.js.');
     }
     let res;
-    // Never spin forever: give up after 45 seconds.
+    // Never spin forever: give up after 30 seconds.
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctrl && setTimeout(function () { ctrl.abort(); }, 45000);
+    const timer = ctrl && setTimeout(function () { ctrl.abort(); }, 30000);
     try {
       res = await fetch(CFG.API_URL, {
         method: 'POST',
@@ -103,11 +90,9 @@
         signal: ctrl ? ctrl.signal : undefined,
       });
     } catch (e) {
-      const err = new Error(translateError(e && e.name === 'AbortError'
+      throw new Error(translateError(e && e.name === 'AbortError'
         ? 'The server took too long to answer. Please try again.'
         : 'Could not reach the server. Check your connection and try again.'));
-      err.retryable = true;
-      throw err;
     } finally {
       if (timer) clearTimeout(timer);
     }

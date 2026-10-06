@@ -7,12 +7,11 @@
  *
  * Data lives in two tabs (created automatically):
  *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime
- *   Signups: EventID | Name | Email | SignedUpAt | Order | Token | Lang | Notify
- *   Players: Name | Email | Notify | Updated   (one row per player; their email choice for all games)
+ *   Signups:    EventID | Name | Email | SignedUpAt | Order | Token | Lang
+ *   EmailPrefs: Email | Notify | Updated   (one row per email: wants confirmation emails or not)
  *
- * Players are identified by their full name (accents and capitals ignored).
- * Email is optional; when given, players get confirmation emails sent from
- * your Gmail (Google allows about 100 recipients a day on a regular account).
+ * Confirmation emails are sent from your Gmail (about 100 recipients a day on a
+ * regular account). Set SEND_EMAILS to false to turn them all off.
  *
  * The admin password lives in Script Properties under ADMIN_PASSWORD.
  */
@@ -20,16 +19,16 @@
 const TZ = 'America/Guatemala';
 const EVENTS_SHEET = 'Events';
 const SIGNUPS_SHEET = 'Signups';
-const PLAYERS_SHEET = 'Players';
-const PLAYER_HEADERS = ['Name', 'Email', 'Notify', 'Updated'];
+const PREFS_SHEET = 'EmailPrefs';
 const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created', 'EndTime'];
-const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token', 'Lang', 'Notify'];
+const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token', 'Lang'];
+const PREFS_HEADERS = ['Email', 'Notify', 'Updated'];
 const DEFAULT_CAP = 15;
-const MAX_NAME = 60;
+const MAX_NAME = 40;
 const MAX_EMAIL = 100;
+const MAX_PER_EMAIL = 2; // the player plus one family member (e.g. a parent signing up their kid)
 const LEADERBOARD_SIZE = 10;
 
-// Confirmation emails. Set SEND_EMAILS to false to turn them all off.
 const SEND_EMAILS = true;
 const SITE_NAME = 'Antigua Pickup';
 const SITE_URL = 'https://robbyho-aoe2.github.io/Antigua-BBall/';
@@ -86,17 +85,12 @@ function doGet() {
 }
 
 function doPost(e) {
-  const started = Date.now();
-  let action = '';
   try {
     const req = JSON.parse((e && e.postData && e.postData.contents) || '{}');
-    action = String(req.action || '');
+    const action = String(req.action || '');
+    ensureSheets_();
     OUTBOX = [];
-    PLAYERS = null;
-    EVENTS_MEMO = null;
-    SIGNUPS_MEMO = null;
-    VERSION = null;
-    ensureSheetsOnce_();
+    PREFS = null;
     let result;
     if (Object.prototype.hasOwnProperty.call(PUBLIC_ACTIONS, action)) {
       result = PUBLIC_ACTIONS[action](req);
@@ -106,78 +100,13 @@ function doPost(e) {
     } else {
       fail_('Unknown action.');
     }
-    const emails = OUTBOX.length;
     flushEmails_();
-    // Shows in Apps Script → Executions, to spot slow requests.
-    console.log(action + ' took ' + (Date.now() - started) + ' ms' + (emails ? ' (' + emails + ' email' + (emails > 1 ? 's' : '') + ')' : ''));
     return json_(Object.assign({ ok: true }, result));
   } catch (err) {
     OUTBOX = [];
     if (!err.isUserError) console.error(err && err.stack ? err.stack : err);
-    console.log(action + ' failed after ' + (Date.now() - started) + ' ms');
     return json_({ ok: false, error: err.isUserError ? err.message : 'Server error: ' + err.message });
   }
-}
-
-/* ------------------------------------------------------------------ */
-/* Speed: skip repeat work and reuse recent answers                    */
-/* ------------------------------------------------------------------ */
-
-const SCHEMA_VERSION = '5'; // bump when tabs or columns change
-
-let EVENTS_MEMO = null;  // this request's copy of the Events tab
-let SIGNUPS_MEMO = null; // this request's copy of the Signups tab
-let VERSION = null;
-
-function cache_() { return CacheService.getScriptCache(); }
-
-/** Checks the tabs and headers once every few hours instead of on every request. */
-function ensureSheetsOnce_() {
-  if (cache_().get('schema') === SCHEMA_VERSION) return;
-  ensureSheets_();
-  cache_().put('schema', SCHEMA_VERSION, 21600);
-}
-
-/** Changes on every write, so cached answers from before a change are never used. */
-function dataVersion_() {
-  if (VERSION) return VERSION;
-  VERSION = cache_().get('v');
-  if (!VERSION) {
-    VERSION = String(Date.now());
-    cache_().put('v', VERSION, 21600);
-  }
-  return VERSION;
-}
-
-function bumpVersion_() {
-  VERSION = String(Date.now()) + Math.random().toString(36).slice(2, 6);
-  cache_().put('v', VERSION, 21600);
-}
-
-/** Forget this request's copies after writing to the sheet. */
-function invalidate_() {
-  EVENTS_MEMO = null;
-  SIGNUPS_MEMO = null;
-}
-
-/**
- * Reuses a recent answer if nothing has changed since. Edits made directly in the
- * Sheet show up once the short TTL runs out (about a minute).
- */
-function cached_(key, ttlSeconds, compute) {
-  const fullKey = key + ':' + dataVersion_();
-  const hit = cache_().get(fullKey);
-  if (hit) return JSON.parse(hit);
-  const value = compute();
-  try {
-    const str = JSON.stringify(value);
-    if (str.length < 90000) cache_().put(fullKey, str, ttlSeconds);
-  } catch (err) { /* caching is best-effort */ }
-  return value;
-}
-
-function statsMap_() {
-  return cached_('stats', 120, function () { return computeStats_(readEvents_(), readSignups_()); });
 }
 
 /* ------------------------------------------------------------------ */
@@ -185,43 +114,31 @@ function statsMap_() {
 /* ------------------------------------------------------------------ */
 
 function listEvents() {
-  return cached_('list:' + today_(), 60, function () {
-    const today = today_();
-    const groups = groupByEvent_(readSignups_());
-    const upcoming = readEvents_()
-      .filter(function (ev) { return ev.date >= today; })
-      .sort(byWhen_)
-      .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
-    return { events: upcoming, leaders: leaderboard_(statsMap_()) };
-  });
+  const today = today_();
+  const events = readEvents_();
+  const signups = readSignups_();
+  const groups = groupByEvent_(signups);
+  const upcoming = events
+    .filter(function (ev) { return ev.date >= today; })
+    .sort(byWhen_)
+    .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
+  return { events: upcoming, leaders: leaderboard_(computeStats_(events, signups)) };
 }
 
 function getEvent(req) {
   const today = today_();
-  const id = String(req.eventId || '').trim();
-  const base = cached_('ev:' + id, 60, function () {
-    const e = findEvent_(id);
-    return {
-      ev: e,
-      list: (groupByEvent_(readSignups_())[e.id] || []).map(function (s) {
-        return { name: s.name, email: s.email, notify: s.notify, token: s.token };
-      }),
-    };
-  });
-  const ev = base.ev;
-  const list = base.list;
+  const ev = findEvent_(req.eventId);
+  const list = groupByEvent_(readSignups_())[ev.id] || [];
   const names = list.map(function (s) { return { name: s.name }; });
   // The device sends the tokens it remembers (usually one; two if a parent also signed up their kid).
   const tokens = [].concat(req.tokens || []).map(String).filter(Boolean);
   const mine = [];
   list.forEach(function (s, idx) {
     if (!s.token || tokens.indexOf(s.token) < 0) return;
-    const pref = emailPref_(s);
     mine.push({
       token: s.token,
       name: s.name,
-      hasEmail: !!pref.email,
-      notify: pref.notify,
+      notify: wantsEmail_(s.email),
       position: idx + 1,
       onRoster: idx < ev.cap,
       waitlistPosition: idx < ev.cap ? 0 : idx - ev.cap + 1,
@@ -236,30 +153,36 @@ function getEvent(req) {
 }
 
 function signup(req) {
-  const name = requireFullName_(cleanName_(req.name));
-  const email = cleanEmail_(req.email, false);
-  const lang = cleanLang_(req.lang);
-  // notify is only sent the first time a player chooses; otherwise their saved choice stands.
-  const notify = typeof req.notify === 'boolean' ? req.notify : undefined;
+  const name = cleanName_(req.name);
+  const email = cleanEmail_(req.email, true);
+  const lang = req.lang === 'es' || req.lang === 'en' ? req.lang : '';
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     if (ev.date < today_()) fail_('This game already happened.');
     if (!ev.open) fail_('Signups are closed for this game.');
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     assertNameFree_(list, name, null);
-    savePlayer_(name, email, notify);
+    const sameEmail = list.filter(function (s) { return s.email === email; });
+    if (sameEmail.length && !req.family) {
+      fail_('This email is already signed up as "' + sameEmail[0].name +
+        '". Signing up your kid or a family member? Tick the family member box.');
+    }
+    if (sameEmail.length >= MAX_PER_EMAIL) {
+      fail_('Only ' + MAX_PER_EMAIL + ' people can sign up with the same email.');
+    }
+    // The email choice is asked once per email; later signups send no choice and keep it.
+    if (typeof req.notify === 'boolean') setPref_(email, req.notify);
     const token = Utilities.getUuid();
-    appendSignup_(ev.id, name, email, nextOrder_(list), token, lang, '');
+    appendSignup_(ev.id, name, email, nextOrder_(list), token, lang);
     const position = list.length + 1;
     const onRoster = position <= ev.cap;
     queueEmail_({ name: name, email: email, lang: lang }, ev, 'signup', { position: position, onRoster: onRoster });
-    const pref = emailPref_({ name: name, email: email });
-    return { token: token, position: position, onRoster: onRoster, hasEmail: !!pref.email, notify: pref.notify };
+    return { token: token, position: position, onRoster: onRoster, notify: wantsEmail_(email) };
   });
 }
 
 function rename(req) {
-  const name = requireFullName_(cleanName_(req.name));
+  const name = cleanName_(req.name);
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     if (ev.date < today_()) fail_('This game already happened.');
@@ -284,39 +207,39 @@ function drop(req) {
   });
 }
 
-/** Turns a player's confirmation emails on or off, for all games. */
+/** Turns confirmation emails on or off for this player's email (all games). */
 function setNotify(req) {
   const notify = req.notify !== false;
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     const s = findByToken_(list, req.token);
-    savePlayer_(s.name, s.email, notify);
+    setPref_(s.email, notify);
     return { notify: notify };
   });
 }
 
-/** Lets a player get their edit token back on a new device using full name + email. */
+/** Lets a player get their edit token back on a new device using name + email. */
 function findSpot(req) {
-  const key = nameKey_(cleanName_(req.name));
+  const name = cleanName_(req.name).toLowerCase();
   const email = cleanEmail_(req.email, true);
   const ev = findEvent_(req.eventId);
   const list = groupByEvent_(readSignups_())[ev.id] || [];
-  const s = list.find(function (x) { return nameKey_(x.name) === key; });
-  const known = s ? emailPref_(s).email : '';
-  if (s && !known) fail_('That signup has no email, so it can\'t be found from another phone. Ask the organizer for help.');
-  if (!s || known !== email) fail_('No signup found with that name and email for this game.');
+  const s = list.find(function (x) { return x.email === email && x.name.toLowerCase() === name; });
+  if (!s) fail_('No signup found with that name and email for this game.');
   return { token: s.token };
 }
 
 function stats(req) {
-  let key = req.name ? nameKey_(cleanName_(req.name)) : '';
-  if (!key && req.token) {
-    const s = readSignups_().find(function (x) { return x.token === String(req.token); });
-    if (s) key = nameKey_(s.name);
+  let email = req.email ? cleanEmail_(req.email, true) : '';
+  const signups = readSignups_();
+  if (!email && req.token) {
+    const s = signups.find(function (x) { return x.token === String(req.token); });
+    if (s) email = s.email;
   }
-  if (!key) fail_('Enter your full name to see your stats.');
-  const p = statsMap_()[key] || emptyStats_();
+  if (!email) fail_('Enter your email to see your stats.');
+  const all = computeStats_(readEvents_(), signups);
+  const p = all[email] || emptyStats_();
   return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters } };
 }
 
@@ -334,7 +257,7 @@ function adminListEvents() {
 }
 
 function adminGetEvent(req) {
-  return withLock_({ readOnly: true }, function () {
+  return withLock_(function () {
     const ev = findEvent_(req.eventId);
     fillMissingTokens_();
     const list = groupByEvent_(readSignups_())[ev.id] || [];
@@ -423,8 +346,7 @@ function adminAddSignup(req) {
     const ev = findEvent_(req.eventId);
     const list = groupByEvent_(readSignups_())[ev.id] || [];
     assertNameFree_(list, name, null);
-    savePlayer_(name, email, undefined);
-    appendSignup_(ev.id, name, email, nextOrder_(list), Utilities.getUuid(), '', '');
+    appendSignup_(ev.id, name, email, nextOrder_(list), Utilities.getUuid(), '');
     const position = list.length + 1;
     queueEmail_({ name: name, email: email, lang: '' }, ev, 'signup', { position: position, onRoster: position <= ev.cap });
     return {};
@@ -440,7 +362,6 @@ function adminUpdateSignup(req) {
     const s = findByToken_(list, req.token);
     assertNameFree_(list, name, s.token);
     sheet_(SIGNUPS_SHEET).getRange(s.row, 2, 1, 2).setValues([[name, email]]);
-    if (email) savePlayer_(name, email, undefined);
     return {};
   });
 }
@@ -487,7 +408,7 @@ function emptyStats_() {
 }
 
 /**
- * Per-player stats over past games, keyed by full name (see nameKey_).
+ * Per-email stats over past games.
  * - games: past games where they made the roster
  * - streak: consecutive past games on the roster (being waitlisted doesn't break it, skipping a game does)
  * - earlyBirds: times they were first to sign up
@@ -498,26 +419,31 @@ function computeStats_(events, signups) {
   const groups = groupByEvent_(signups);
   const past = events.filter(function (ev) { return ev.date < today; }).sort(byWhen_);
   const players = {};
-  const get = function (key) { return players[key] || (players[key] = emptyStats_()); };
+  const get = function (email) { return players[email] || (players[email] = emptyStats_()); };
 
   const statuses = past.map(function (ev) {
     const list = groups[ev.id] || [];
     const status = {};
     list.forEach(function (s, i) {
-      const key = nameKey_(s.name);
-      status[key] = i < ev.cap ? 'roster' : 'wait';
-      get(key).name = s.name; // latest game wins, so the newest spelling shows
+      if (!s.email) return;
+      const onRoster = i < ev.cap;
+      if (!status[s.email]) {
+        status[s.email] = onRoster ? 'roster' : 'wait';
+        get(s.email).name = s.name; // latest game wins, so renames carry forward
+      } else if (onRoster) {
+        status[s.email] = 'roster';
+      }
     });
-    if (list.length) get(nameKey_(list[0].name)).earlyBirds++;
-    if (list.length >= ev.cap) get(nameKey_(list[ev.cap - 1].name)).buzzerBeaters++;
+    if (list.length && list[0].email) get(list[0].email).earlyBirds++;
+    if (list.length >= ev.cap && list[ev.cap - 1].email) get(list[ev.cap - 1].email).buzzerBeaters++;
     return status;
   });
 
-  Object.keys(players).forEach(function (key) {
-    const p = players[key];
+  Object.keys(players).forEach(function (email) {
+    const p = players[email];
     let cur = 0;
     statuses.forEach(function (status) {
-      const st = status[key];
+      const st = status[email];
       if (st === 'roster') {
         p.games++;
         cur++;
@@ -545,12 +471,7 @@ function leaderboard_(players) {
 /* ------------------------------------------------------------------ */
 
 function sheet_(name) {
-  let sh = SpreadsheetApp.getActive().getSheetByName(name);
-  if (!sh) { // a tab was deleted or renamed: recreate it
-    ensureSheets_();
-    sh = SpreadsheetApp.getActive().getSheetByName(name);
-  }
-  return sh;
+  return SpreadsheetApp.getActive().getSheetByName(name);
 }
 
 function ensureSheets_() {
@@ -564,59 +485,7 @@ function ensureSheets_() {
   const signups = ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
   // Sheets made before the Lang column existed: add its header once.
   if (signups.getRange(1, 7).getValue() === '') signups.getRange(1, 7).setValue('Lang').setFontWeight('bold');
-  if (signups.getRange(1, 8).getValue() === '') signups.getRange(1, 8).setValue('Notify').setFontWeight('bold');
-  ensureSheet_(ss, PLAYERS_SHEET, PLAYER_HEADERS, []);
-}
-
-/* ------------------------------------------------------------------ */
-/* Players (email + email choice, saved once per player)               */
-/* ------------------------------------------------------------------ */
-
-let PLAYERS = null; // per-request cache: nameKey → { row, name, email, notify }
-
-function players_() {
-  if (PLAYERS) return PLAYERS;
-  PLAYERS = {};
-  const sh = sheet_(PLAYERS_SHEET);
-  const n = sh.getLastRow() - 1;
-  if (n < 1) return PLAYERS;
-  sh.getRange(2, 1, n, PLAYER_HEADERS.length).getValues().forEach(function (r, i) {
-    const name = String(r[0]).trim();
-    if (!name) return;
-    const raw = String(r[2]).trim();
-    PLAYERS[nameKey_(name)] = {
-      row: i + 2,
-      name: name,
-      email: String(r[1]).trim().toLowerCase(),
-      notify: !(r[2] === false || /^(false|no|0)$/i.test(raw)), // blank = yes
-    };
-  });
-  return PLAYERS;
-}
-
-/**
- * Creates or updates a player's saved email/choice. Pass notify as undefined to keep
- * what they chose before (new players default to getting emails).
- */
-function savePlayer_(name, email, notify) {
-  const p = players_()[nameKey_(name)];
-  const sh = sheet_(PLAYERS_SHEET);
-  if (!p) {
-    if (!email && notify === undefined) return;
-    sh.appendRow([name, email || '', notify !== false, new Date()]);
-  } else {
-    sh.getRange(p.row, 1, 1, 4).setValues([[name, email || p.email, notify === undefined ? p.notify : notify, new Date()]]);
-  }
-  PLAYERS = null;
-}
-
-/** Where (and whether) to email a signup: the player's saved choice, else the signup row. */
-function emailPref_(s) {
-  const p = players_()[nameKey_(s.name)];
-  return {
-    email: s.email || (p ? p.email : ''),
-    notify: p ? p.notify : s.notify !== false,
-  };
+  ensureSheet_(ss, PREFS_SHEET, PREFS_HEADERS, []);
 }
 
 function ensureSheet_(ss, name, headers, textColumns) {
@@ -631,12 +500,6 @@ function ensureSheet_(ss, name, headers, textColumns) {
 }
 
 function readEvents_() {
-  if (EVENTS_MEMO) return EVENTS_MEMO;
-  EVENTS_MEMO = readEventsFresh_();
-  return EVENTS_MEMO;
-}
-
-function readEventsFresh_() {
   const sh = sheet_(EVENTS_SHEET);
   const n = sh.getLastRow() - 1;
   if (n < 1) return [];
@@ -661,12 +524,6 @@ function readEventsFresh_() {
 }
 
 function readSignups_() {
-  if (SIGNUPS_MEMO) return SIGNUPS_MEMO;
-  SIGNUPS_MEMO = readSignupsFresh_();
-  return SIGNUPS_MEMO;
-}
-
-function readSignupsFresh_() {
   const sh = sheet_(SIGNUPS_SHEET);
   const n = sh.getLastRow() - 1;
   if (n < 1) return [];
@@ -680,8 +537,6 @@ function readSignupsFresh_() {
       order: Number(r[4]) || 0,
       token: String(r[5]).trim(),
       lang: String(r[6] || '').trim(),
-      // Blank (older rows) means yes; FALSE/no/0 turns emails off.
-      notify: !(r[7] === false || /^(false|no|0)$/i.test(String(r[7]).trim())),
     };
   }).filter(function (s) { return s.eventId && s.name; });
 }
@@ -689,15 +544,71 @@ function readSignupsFresh_() {
 /** Rows typed into the sheet by hand have no token; give them one so admin tools can target them. */
 function fillMissingTokens_() {
   const sh = sheet_(SIGNUPS_SHEET);
-  let wrote = false;
   readSignups_().forEach(function (s) {
-    if (!s.token) { sh.getRange(s.row, 6).setValue(Utilities.getUuid()); wrote = true; }
+    if (!s.token) sh.getRange(s.row, 6).setValue(Utilities.getUuid());
   });
-  if (wrote) { invalidate_(); bumpVersion_(); }
 }
 
-function appendSignup_(eventId, name, email, order, token, lang, notify) {
-  sheet_(SIGNUPS_SHEET).appendRow([eventId, name, email, new Date(), order, token, lang || '', notify !== false]);
+function appendSignup_(eventId, name, email, order, token, lang) {
+  sheet_(SIGNUPS_SHEET).appendRow([eventId, name, email, new Date(), order, token, lang || '']);
+}
+
+/**
+ * Runs a change and emails anyone it moves on or off the roster
+ * (e.g. someone drops and the first waitlisted player gets their spot).
+ */
+function withRosterWatch_(eventId, change) {
+  const evBefore = findEvent_(eventId);
+  const before = groupByEvent_(readSignups_())[eventId] || [];
+  const result = change(before, evBefore);
+  const ev = findEvent_(eventId);
+  if (SEND_EMAILS && ev.date >= today_()) {
+    const wasOn = {};
+    before.forEach(function (s, i) { if (s.token) wasOn[s.token] = i < evBefore.cap; });
+    (groupByEvent_(readSignups_())[eventId] || []).forEach(function (s, i) {
+      if (!s.token || !(s.token in wasOn)) return;
+      const on = i < ev.cap;
+      if (on && !wasOn[s.token]) queueEmail_(s, ev, 'promoted', { position: i + 1 });
+      if (!on && wasOn[s.token]) queueEmail_(s, ev, 'demoted', { position: i - ev.cap + 1 });
+    });
+  }
+  return result;
+}
+
+/* ------------------------------------------------------------------ */
+/* Email choice (one row per email in the EmailPrefs tab)              */
+/* ------------------------------------------------------------------ */
+
+let PREFS = null; // this request's copy: email → { row, notify }
+
+function prefs_() {
+  if (PREFS) return PREFS;
+  PREFS = {};
+  const sh = sheet_(PREFS_SHEET);
+  const n = sh.getLastRow() - 1;
+  if (n < 1) return PREFS;
+  sh.getRange(2, 1, n, 2).getValues().forEach(function (r, i) {
+    const email = String(r[0]).trim().toLowerCase();
+    if (email) PREFS[email] = { row: i + 2, notify: !(r[1] === false || /^(false|no|0)$/i.test(String(r[1]).trim())) };
+  });
+  return PREFS;
+}
+
+/** Everyone gets emails unless they opted out. */
+function wantsEmail_(email) {
+  if (!email) return false;
+  const p = prefs_()[String(email).toLowerCase()];
+  return p ? p.notify : true;
+}
+
+function setPref_(email, notify) {
+  email = String(email || '').toLowerCase();
+  if (!email) return;
+  const p = prefs_()[email];
+  const sh = sheet_(PREFS_SHEET);
+  if (p) sh.getRange(p.row, 2, 1, 2).setValues([[notify, new Date()]]);
+  else sh.appendRow([email, notify, new Date()]);
+  PREFS = null;
 }
 
 function groupByEvent_(signups) {
@@ -729,38 +640,9 @@ function findByToken_(list, token) {
 }
 
 function assertNameFree_(list, name, exceptToken) {
-  const key = nameKey_(name);
-  const clash = list.find(function (s) { return nameKey_(s.name) === key && s.token !== exceptToken; });
-  if (clash) fail_('"' + clash.name + '" is already signed up for this game.');
-}
-
-/** Same person = same full name, ignoring capitals, accents and extra spaces ("José  Pérez" = "jose perez"). */
-function nameKey_(name) {
-  return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .toLowerCase().replace(/\s+/g, ' ').trim();
-}
-
-/**
- * Runs a change and emails anyone it moves on or off the roster
- * (e.g. someone drops and the first waitlisted player gets their spot).
- */
-function withRosterWatch_(eventId, change) {
-  const evBefore = findEvent_(eventId);
-  const before = groupByEvent_(readSignups_())[eventId] || [];
-  const result = change(before, evBefore);
-  invalidate_();
-  const ev = findEvent_(eventId);
-  if (SEND_EMAILS && ev.date >= today_()) {
-    const wasOn = {};
-    before.forEach(function (s, i) { if (s.token) wasOn[s.token] = i < evBefore.cap; });
-    (groupByEvent_(readSignups_())[eventId] || []).forEach(function (s, i) {
-      if (!s.token || !(s.token in wasOn)) return;
-      const on = i < ev.cap;
-      if (on && !wasOn[s.token]) queueEmail_(s, ev, 'promoted', { position: i + 1 });
-      if (!on && wasOn[s.token]) queueEmail_(s, ev, 'demoted', { position: i - ev.cap + 1 });
-    });
-  }
-  return result;
+  const lower = name.toLowerCase();
+  const clash = list.find(function (s) { return s.name.toLowerCase() === lower && s.token !== exceptToken; });
+  if (clash) fail_('"' + name + '" is already on the list. Add a last initial to tell you apart.');
 }
 
 function nextOrder_(list) {
@@ -797,18 +679,12 @@ function checkAdmin_(password) {
   }
 }
 
-function withLock_(opts, fn) {
-  if (typeof opts === 'function') { fn = opts; opts = {}; }
+function withLock_(fn) {
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(20000)) fail_('Lots of people signing up right now. Please try again.');
   try {
-    invalidate_(); // read fresh data once we hold the lock
     const result = fn();
-    if (!opts.readOnly) {
-      SpreadsheetApp.flush();
-      invalidate_();
-      bumpVersion_();
-    }
+    SpreadsheetApp.flush();
     return result;
   } finally {
     lock.releaseLock();
@@ -819,20 +695,7 @@ function cleanName_(v) {
   const name = String(v || '').replace(/\s+/g, ' ').trim().replace(/^[=+\-@]+/, '').trim();
   if (!name) fail_('Enter your name.');
   if (name.length > MAX_NAME) fail_('Name is too long (max ' + MAX_NAME + ' characters).');
-  // "pedro gomez" → "Pedro Gomez"; names typed with any capitals are kept as typed.
-  if (name === name.toLowerCase()) {
-    return name.split(' ').map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
-  }
   return name;
-}
-
-function requireFullName_(name) {
-  if (name.split(' ').length < 2) fail_('Please enter your full name (first and last).');
-  return name;
-}
-
-function cleanLang_(v) {
-  return v === 'es' || v === 'en' ? v : '';
 }
 
 function cleanEmail_(v, required) {
@@ -910,10 +773,9 @@ let OUTBOX = [];
 // Emails are collected while the sheet is locked and sent after, so a slow
 // send never holds up other players.
 function queueEmail_(s, ev, kind, extra) {
-  if (!SEND_EMAILS || ev.date < today_()) return;
-  const pref = s.test ? { email: s.email, notify: true } : emailPref_(s);
-  if (!pref.email || !pref.notify) return;
-  OUTBOX.push({ to: pref.email, name: s.name, lang: s.lang, ev: ev, kind: kind, extra: extra || {} });
+  if (!SEND_EMAILS || !s.email || ev.date < today_()) return;
+  if (!s.test && !wantsEmail_(s.email)) return; // opted out
+  OUTBOX.push({ to: s.email, name: s.name, lang: s.lang, ev: ev, kind: kind, extra: extra || {} });
 }
 
 function flushEmails_() {
