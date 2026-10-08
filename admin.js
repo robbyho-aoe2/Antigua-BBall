@@ -33,6 +33,13 @@
     }
   }
 
+  // The ?v= on this page's scripts, so it's easy to tell which copy a phone is running.
+  function siteVersion() {
+    const tag = document.querySelector('script[src*="admin.js"]');
+    const m = tag && /[?&]v=([^&]+)/.exec(tag.getAttribute('src'));
+    return m ? m[1] : 'unknown';
+  }
+
   function playerLink(id) {
     return new URL('./', location.href).href + '?event=' + encodeURIComponent(id);
   }
@@ -96,15 +103,11 @@
     form.onsubmit = function (e) {
       e.preventDefault();
       const value = field(form, 'pw').value;
-      P.busy(form.querySelector('button'), async function () {
-        try {
-          await P.api('adminLogin', { password: value });
-          setPassword(value);
-          route();
-        } catch (err) {
-          P.toast(err.message, true);
-        }
-      });
+      if (!value) return;
+      // No separate password check (that was an extra slow trip to Google): loading the
+      // games list checks it, and a wrong password brings you back here.
+      setPassword(value);
+      route();
     };
   }
 
@@ -149,7 +152,8 @@
         '<button class="btn accent" id="dup-last">Copy last game +7 days</button>' +
       '</div>' +
       (data.events.length ? data.events.map(eventRow).join('') : '<div class="card muted">No games yet. Create your first one.</div>') +
-      '<button class="linkish small" id="logout">Log out</button>';
+      '<button class="linkish small" id="logout">Log out</button>' +
+      '<p class="hint" style="text-align:center">Site version ' + esc(siteVersion()) + '</p>';
 
     document.getElementById('dup-last').onclick = function (e) {
       P.busy(e.currentTarget, async function () {
