@@ -11,6 +11,8 @@ window.APP_CONFIG = {
   // Default total court cost (quetzales) for new games; each game can be changed in admin.
   // The game page shows the cost per player, rounded up to the nearest Q5.
   DEFAULT_COST: 400,
+  // Split the cost across a full roster until at least this many have signed up.
+  COST_MIN_PLAYERS: 6,
 
   // Gyms shown in the admin dropdown. The first one is the default for new games.
   // On the player page the game's location links to Google Maps.

@@ -291,12 +291,15 @@
   }
 
   // Per-person share for the players on the roster (not the waitlist), rounded up to the nearest Q5.
-  // Before anyone signs up, split across a full roster.
+  // Until a few people have signed up (COST_MIN_PLAYERS, default 6), assume a full roster
+  // so early sign-ups don't see a scary number.
   function costPerPerson(ev) {
     const total = gameCost(ev);
     if (!(total > 0)) return null;
-    const players = ev.filled > 0 ? ev.filled : ev.cap;
-    return { total: total, players: players, each: Math.ceil(total / players / 5) * 5 };
+    const min = Number(CFG.COST_MIN_PLAYERS) || 6;
+    const full = !(ev.filled >= min);
+    const players = full ? ev.cap : ev.filled;
+    return { total: total, players: players, full: full, each: Math.ceil(total / players / 5) * 5 };
   }
 
   /* ---------- UI bits ---------- */

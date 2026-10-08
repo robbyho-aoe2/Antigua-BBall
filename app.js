@@ -453,7 +453,7 @@
     const c = P.costPerPerson(ev);
     if (!c) return '';
     return '<div class="cost-line">' + I.svg('cash') +
-      '<span>' + t(ev.filled > 0 ? 'costLine' : 'costLineFull', { total: 'Q' + c.total, each: '<b>Q' + c.each + '</b>', n: c.players }) + '</span></div>';
+      '<span>' + t(c.full ? 'costLineFull' : 'costLine', { total: 'Q' + c.total, each: '<b>Q' + c.each + '</b>', n: c.players }) + '</span></div>';
   }
 
   function meCard(ev, m, count) {
