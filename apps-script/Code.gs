@@ -6,7 +6,7 @@
  * See README.md for the full setup steps.
  *
  * Data lives in two tabs (created automatically):
- *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime
+ *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime | Cost
  *   Signups:    EventID | Name | Email | SignedUpAt | Order | Token | Lang
  *   EmailPrefs: Email | Notify | Updated   (one row per email: wants confirmation emails or not)
  *
@@ -20,7 +20,7 @@ const TZ = 'America/Guatemala';
 const EVENTS_SHEET = 'Events';
 const SIGNUPS_SHEET = 'Signups';
 const PREFS_SHEET = 'EmailPrefs';
-const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created', 'EndTime'];
+const EVENT_HEADERS = ['ID', 'Date', 'Time', 'Location', 'Cap', 'Notes', 'Open', 'Created', 'EndTime', 'Cost'];
 const SIGNUP_HEADERS = ['EventID', 'Name', 'Email', 'SignedUpAt', 'Order', 'Token', 'Lang'];
 const PREFS_HEADERS = ['Email', 'Notify', 'Updated'];
 const DEFAULT_CAP = 15;
@@ -288,6 +288,8 @@ function adminSaveEvent(req) {
   const time = normTime_(e.time);
   if (!/^\d{2}:\d{2}$/.test(time)) fail_('Pick a time.');
   const endTime = e.endTime ? normTime_(e.endTime) : '';
+  // Total court cost in quetzales; blank means the default (Q400), 0 hides it.
+  const cost = e.cost === '' || e.cost == null ? '' : Math.max(0, Math.round(Number(e.cost) || 0));
   if (endTime && !/^\d{2}:\d{2}$/.test(endTime)) fail_('End time doesn\'t look right.');
   const location = cleanText_(e.location, 80);
   if (!location) fail_('Enter a location.');
@@ -303,12 +305,12 @@ function adminSaveEvent(req) {
       // A new roster size can move people on or off the roster; tell them.
       return withRosterWatch_(ev.id, function () {
         sh.getRange(ev.row, 2, 1, 6).setValues([[date, time, safeCell_(location), cap, safeCell_(notes), open]]);
-        sh.getRange(ev.row, 9).setValue(endTime);
+        sh.getRange(ev.row, 9, 1, 2).setValues([[endTime, cost]]);
         return { id: ev.id };
       });
     }
     const id = newId_();
-    sh.appendRow([id, date, time, safeCell_(location), cap, safeCell_(notes), open, new Date(), endTime]);
+    sh.appendRow([id, date, time, safeCell_(location), cap, safeCell_(notes), open, new Date(), endTime, cost]);
     return { id: id };
   });
 }
@@ -340,7 +342,7 @@ function adminDuplicateEvent(req) {
     }
     const id = newId_();
     const date = addDays_(src.date, 7);
-    sheet_(EVENTS_SHEET).appendRow([id, date, src.time, safeCell_(src.location), src.cap, safeCell_(src.notes), true, new Date(), src.endTime]);
+    sheet_(EVENTS_SHEET).appendRow([id, date, src.time, safeCell_(src.location), src.cap, safeCell_(src.notes), true, new Date(), src.endTime, src.cost == null ? '' : src.cost]);
     return { id: id, date: date };
   });
 }
@@ -492,6 +494,7 @@ function ensureSheets_() {
     events.getRange(1, 9).setValue('EndTime').setFontWeight('bold');
     events.getRange('I:I').setNumberFormat('@');
   }
+  if (events.getRange(1, 10).getValue() === '') events.getRange(1, 10).setValue('Cost').setFontWeight('bold');
   const signups = ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
   // Sheets made before the Lang column existed: add its header once.
   if (signups.getRange(1, 7).getValue() === '') signups.getRange(1, 7).setValue('Lang').setFontWeight('bold');
@@ -524,6 +527,7 @@ function readEvents_() {
       date: normDate_(r[1]),
       time: normTime_(disp[i][2]),
       endTime: normTime_(disp[i][8]),
+      cost: r[9] === '' || r[9] == null || isNaN(Number(r[9])) ? null : Number(r[9]),
       location: String(r[3]).trim(),
       cap: Number(r[4]) >= 1 ? Math.floor(Number(r[4])) : DEFAULT_CAP,
       notes: String(r[5] || '').trim(),
@@ -665,6 +669,7 @@ function publicEvent_(ev, list, today) {
     date: ev.date,
     time: ev.time,
     endTime: ev.endTime,
+    cost: ev.cost,
     location: ev.location,
     cap: ev.cap,
     notes: ev.notes,

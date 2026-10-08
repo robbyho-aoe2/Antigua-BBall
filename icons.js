@@ -18,6 +18,7 @@
     trophy: '<path d="M8 3.5h8v5.5a4 4 0 0 1-8 0z"/><path d="M8 5.5H4.5a3.5 3.5 0 0 0 3.6 4.2M16 5.5h3.5a3.5 3.5 0 0 1-3.6 4.2M12 13v4M8 21h8M9.5 17h5v4h-5z"/>',
     alert: '<path d="M12 3.5l9.5 16.5h-19z"/><path d="M12 10v4.5M12 17.4v.2"/>',
     check: '<circle cx="12" cy="12" r="9"/><path d="M8 12.4l2.7 2.7L16.2 9.6"/>',
+    cash: '<rect x="2.5" y="6" width="19" height="12" rx="2"/><circle cx="12" cy="12" r="2.6"/><path d="M6 9.5v.01M18 14.5v.01"/>',
     install: '<rect x="6.5" y="2.5" width="11" height="19" rx="2.2"/><path d="M12 7v7M9.3 11.4L12 14l2.7-2.6M10.5 18.5h3"/>',
   };
 

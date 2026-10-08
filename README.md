@@ -117,6 +117,7 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
   - dropped out, or removed by the organizer
 - **Email opt-in:** the first time someone signs up with an email, they choose **"Email me updates about my games"** (on by default). The choice is saved for that email and applies to all games, so they aren't asked again. They can switch it any time with **🔔 / 🔕 Turn on/off** on their "You're signed up" card, or on the **👤 "You" card** on the home page (below Upcoming games), which also shows who the phone is signed up as and their stats.
 - **Past games:** the home page lists the 8 most recent past games under the "You" card. Tap one to see the final roster. You can see or change it in the **EmailPrefs** tab (Notify TRUE/FALSE). To turn all emails off, set `SEND_EMAILS = false` near the top of `Code.gs` and redeploy.
+- **Cost reminder:** the game page shows a small line like "Q400 court · about **Q30** each with 14 players": the game's total cost split across the players on the roster (not the waitlist), rounded up to the nearest Q5. It updates as people sign up or drop.
 - **Waitlist:** if someone on the roster drops, the first person on the waitlist moves up automatically.
 - **Closed signups:** you can still see the roster, and players can still drop out.
 - **Past games** disappear from the main page the day after. The direct link still shows the final list.
@@ -169,11 +170,12 @@ The Sheet is meant to be readable and editable by hand:
 
 **Events tab**
 
-| ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime |
-|---|---|---|---|---|---|---|---|---|
-| a1b2c3d4 | 2026-10-14 | 19:00 | Centro Integral Deportivo Ciudad Vieja | 15 | Bring 2 shirts | TRUE | … | 21:00 |
+| ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime | Cost |
+|---|---|---|---|---|---|---|---|---|---|
+| a1b2c3d4 | 2026-10-14 | 19:00 | Centro Integral Deportivo Ciudad Vieja | 15 | Bring 2 shirts | TRUE | … | 21:00 | 400 |
 
 - **Date:** `YYYY-MM-DD`. `M/D/YYYY` also works.
+- **Cost:** total court cost in quetzales. Blank uses the default (`DEFAULT_COST` in `config.js`, Q400); 0 hides the cost line.
 - **Time / EndTime:** 24-hour like `19:00`. `7:00 PM` also works. EndTime is optional; leave it blank if there isn't one.
 - **Open:** `TRUE` or `FALSE`. Blank counts as open.
 - **ID:** any short unique text, if you add a row by hand.

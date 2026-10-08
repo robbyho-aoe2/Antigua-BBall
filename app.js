@@ -421,6 +421,7 @@
           (P.findLocation(ev.location) && P.findLocation(ev.location).address
             ? '<span class="where-addr">' + esc(P.findLocation(ev.location).address) + '</span>' : '') +
           '<span class="where-map">' + t('openMap') + ' ↗</span></span></a>' +
+        costLine(ev) +
         (ev.notes ? '<div class="notes">' + esc(ev.notes) + '</div>' : '') +
         '<div class="row">' + pill + '<button class="btn sm" id="share-btn">' + t('share') + '</button></div>' +
       '</div>';
@@ -445,6 +446,14 @@
     if (mine.length) html += '<div class="card" id="my-stats" style="margin-top:16px"><div class="muted small">' + t('loadingStats') + '</div></div>';
     app.innerHTML = html;
     wireEvent(ev, mine);
+  }
+
+  // Small reminder of how much to bring: total ÷ players on the roster, rounded up to Q5.
+  function costLine(ev) {
+    const c = P.costPerPerson(ev);
+    if (!c) return '';
+    return '<div class="cost-line">' + I.svg('cash') +
+      '<span>' + t(ev.filled > 0 ? 'costLine' : 'costLineFull', { total: 'Q' + c.total, each: '<b>Q' + c.each + '</b>', n: c.players }) + '</span></div>';
   }
 
   function meCard(ev, m, count) {

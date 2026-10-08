@@ -151,6 +151,9 @@ h2:first-child { margin-top: 4px; }
 .where-name { display: block; font-weight: 700; color: var(--jade-700); }
 .where-addr { display: block; font-size: 14px; color: var(--stone); }
 .where-map { display: block; font-size: 13px; font-weight: 600; color: var(--jade-700); text-decoration: underline; margin-top: 2px; }
+.cost-line { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: 13px; color: var(--stone); }
+.cost-line .ic { color: var(--stone); width: 16px; height: 16px; }
+.cost-line b { color: var(--ink); }
 .event-head .notes { margin-top: 10px; padding: 10px 12px; background: var(--ochre-100); border-radius: 10px; white-space: pre-wrap; }
 .event-head .row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
 

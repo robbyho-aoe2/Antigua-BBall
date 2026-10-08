@@ -149,7 +149,7 @@
         const r = await adminApi('adminListEvents');
         const last = r.events[0];
         const firstGym = P.locations()[0];
-        ev = { date: '', time: last ? last.time : '19:00', endTime: last ? last.endTime || '' : '', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, notes: '', open: true };
+        ev = { date: '', time: last ? last.time : '19:00', endTime: last ? last.endTime || '' : '', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, cost: last ? P.gameCost(last) : P.gameCost({}), notes: '', open: true };
       }
     } catch (e) {
       if (password) showError(e);
@@ -166,7 +166,9 @@
           '<div><label for="f-end">End time (optional)</label><input id="f-end" type="time" name="endTime" value="' + esc(ev.endTime || '') + '"></div>' +
           '<div><label for="f-cap">Roster size</label><input id="f-cap" type="number" name="cap" min="1" max="200" inputmode="numeric" value="' + esc(ev.cap) + '"></div>' +
           '<div class="full">' + locationField(ev.location) + '</div>' +
-          '<div class="full"><label class="check"><input type="checkbox" name="open"' + (ev.open ? ' checked' : '') + '><span>Signups open</span></label></div>' +
+          '<div><label for="f-cost">Total cost (Q)</label><input id="f-cost" type="number" name="cost" min="0" step="5" inputmode="numeric" value="' + esc(P.gameCost(ev)) + '"></div>' +
+          '<div style="align-self:end"><label class="check"><input type="checkbox" name="open"' + (ev.open ? ' checked' : '') + '><span>Signups open</span></label></div>' +
+          '<p class="hint full" style="margin-top:4px">Players see the cost per person (split across the roster, rounded up to Q5). Set 0 to hide it.</p>' +
           '<div class="full"><label for="f-notes">Notes (optional)</label><textarea id="f-notes" name="notes" maxlength="500" placeholder="e.g. Bring a white and a dark shirt">' + esc(ev.notes) + '</textarea></div>' +
         '</div>' +
         '<button class="btn primary block" type="submit">' + (id ? 'Save changes' : 'Create game') + '</button>' +
@@ -194,6 +196,7 @@
         date: field(form, 'date').value,
         time: field(form, 'time').value,
         endTime: field(form, 'endTime').value,
+        cost: field(form, 'cost').value === '' ? '' : Number(field(form, 'cost').value),
         location: field(form, 'loc-choice').value === OTHER ? field(form, 'location').value : field(form, 'loc-choice').value,
         cap: field(form, 'cap').value || 15,
         notes: field(form, 'notes').value,

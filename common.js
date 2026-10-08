@@ -245,6 +245,23 @@
     onChange: function (fn) { installListeners.push(fn); },
   };
 
+  /* ---------- court cost ---------- */
+
+  // A game's total cost: blank means the default, 0 means "don't show".
+  function gameCost(ev) {
+    const def = Number(CFG.DEFAULT_COST) || 0;
+    return ev.cost == null || ev.cost === '' || isNaN(Number(ev.cost)) ? def : Number(ev.cost);
+  }
+
+  // Per-person share for the players on the roster (not the waitlist), rounded up to the nearest Q5.
+  // Before anyone signs up, split across a full roster.
+  function costPerPerson(ev) {
+    const total = gameCost(ev);
+    if (!(total > 0)) return null;
+    const players = ev.filled > 0 ? ev.filled : ev.cap;
+    return { total: total, players: players, each: Math.ceil(total / players / 5) * 5 };
+  }
+
   /* ---------- UI bits ---------- */
 
   let toastTimer;
@@ -283,7 +300,7 @@
   }
 
   window.Pickup = {
-    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, todayGT: todayGT, store: store, cache: cache, install: install,
+    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, todayGT: todayGT, gameCost: gameCost, costPerPerson: costPerPerson, store: store, cache: cache, install: install,
     toast: toast, busy: busy, applyBranding: applyBranding,
     t: t, tn: tn, locale: locale, locations: locations, findLocation: findLocation, mapsUrl: mapsUrl, useLang: useLang, lang: function () { return lang; },
   };

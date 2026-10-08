@@ -8,6 +8,10 @@ window.APP_CONFIG = {
   TAGLINE: 'Pickup basketball · Antigua Guatemala',
   TAGLINE_ES: 'Básquet · Antigua Guatemala',
 
+  // Default total court cost (quetzales) for new games; each game can be changed in admin.
+  // The game page shows the cost per player, rounded up to the nearest Q5.
+  DEFAULT_COST: 400,
+
   // Gyms shown in the admin dropdown. The first one is the default for new games.
   // On the player page the game's location links to Google Maps.
   // Optional mapUrl: paste a Google Maps share link to pin the exact spot.
