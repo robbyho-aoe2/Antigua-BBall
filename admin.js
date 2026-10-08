@@ -49,7 +49,21 @@
   }
   window.addEventListener('hashchange', route);
 
-  function loading() { app.innerHTML = '<div class="loading">Loading…</div>'; }
+  // Shows how long Google is taking, so a slow script doesn't look like a frozen page.
+  let loadingTimer = null;
+  function loading() {
+    app.innerHTML = '<div class="loading">Loading…<div class="small muted" id="wait-note"></div></div>';
+    const started = Date.now();
+    clearInterval(loadingTimer);
+    loadingTimer = setInterval(function () {
+      const note = document.getElementById('wait-note');
+      if (!note) { clearInterval(loadingTimer); return; }
+      const secs = Math.round((Date.now() - started) / 1000);
+      const w = P.waitState();
+      if (w.retrying) note.textContent = 'Google didn\'t answer, trying again… (' + secs + 's)';
+      else if (secs >= 6) note.textContent = 'Still waiting for Google\'s server… (' + secs + 's)';
+    }, 1000);
+  }
 
   function showError(err) {
     app.innerHTML = '<div class="error-box">' + esc(err.message) + '</div>' +

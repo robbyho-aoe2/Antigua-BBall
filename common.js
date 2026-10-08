@@ -80,13 +80,32 @@
   const READ_ONLY = ['listEvents', 'getEvent', 'stats', 'adminLogin', 'adminListEvents', 'adminGetEvent'];
   const RETRY_DELAYS = [1500, 4000];
 
+  // Lets pages show "still waiting / trying again" while a request is slow.
+  let pending = 0;
+  let retrying = 0;
+  const waitListeners = [];
+  function notifyWait() { waitListeners.forEach(function (fn) { fn({ pending: pending, retrying: retrying }); }); }
+  function onWait(fn) { waitListeners.push(fn); }
+
   async function api(action, data) {
+    pending++;
+    try {
+      return await apiWithRetry(action, data);
+    } finally {
+      pending--;
+    }
+  }
+
+  async function apiWithRetry(action, data) {
     for (let attempt = 0; ; attempt++) {
       try {
         return await apiOnce(action, data);
       } catch (e) {
         if (!e.retryable || READ_ONLY.indexOf(action) < 0 || attempt >= RETRY_DELAYS.length) throw e;
+        retrying++;
+        notifyWait();
         await new Promise(function (r) { setTimeout(r, RETRY_DELAYS[attempt]); });
+        retrying--;
       }
     }
   }
@@ -300,7 +319,7 @@
   }
 
   window.Pickup = {
-    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, todayGT: todayGT, gameCost: gameCost, costPerPerson: costPerPerson, store: store, cache: cache, install: install,
+    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, todayGT: todayGT, onWait: onWait, waitState: function () { return { pending: pending, retrying: retrying }; }, gameCost: gameCost, costPerPerson: costPerPerson, store: store, cache: cache, install: install,
     toast: toast, busy: busy, applyBranding: applyBranding,
     t: t, tn: tn, locale: locale, locations: locations, findLocation: findLocation, mapsUrl: mapsUrl, useLang: useLang, lang: function () { return lang; },
   };
