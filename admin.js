@@ -62,6 +62,16 @@
       const w = P.waitState();
       if (w.retrying) note.textContent = 'Google didn\'t answer, trying again… (' + secs + 's)';
       else if (secs >= 6) note.textContent = 'Still waiting for Google\'s server… (' + secs + 's)';
+      // Never leave you stuck watching a counter.
+      if (secs >= 20 && !document.getElementById('wait-retry')) {
+        const btn = document.createElement('button');
+        btn.id = 'wait-retry';
+        btn.className = 'btn sm';
+        btn.style.marginTop = '12px';
+        btn.textContent = 'Try again now';
+        btn.onclick = function () { route(); };
+        note.parentNode.appendChild(btn);
+      }
     }, 1000);
   }
 

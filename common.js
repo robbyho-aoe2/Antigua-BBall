@@ -114,27 +114,45 @@
     if (!CFG.API_URL || CFG.API_URL.indexOf('PASTE_') === 0) {
       throw new Error('This site is not connected yet: paste your Apps Script URL into config.js.');
     }
-    let res;
-    // Never spin forever: give up after 45 seconds.
+    // Never spin forever: the whole request (connect, wait AND reading the answer) must
+    // finish within 45 seconds. A hard timer backs up the abort in case the browser ignores it.
     const ctrl = typeof AbortController === 'function' ? new AbortController() : null;
-    const timer = ctrl && setTimeout(function () { ctrl.abort(); }, 45000);
+    let timer;
+    const timeout = new Promise(function (_, reject) {
+      timer = setTimeout(function () {
+        if (ctrl) ctrl.abort();
+        const err = new Error(translateError('The server took too long to answer. Please try again.'));
+        err.retryable = true;
+        reject(err);
+      }, 45000);
+    });
+    const request = (async function () {
+      let res;
+      try {
+        res = await fetch(CFG.API_URL, {
+          method: 'POST',
+          body: JSON.stringify(Object.assign({ action: action }, data || {})),
+          signal: ctrl ? ctrl.signal : undefined,
+        });
+      } catch (e) {
+        const err = new Error(translateError(e && e.name === 'AbortError'
+          ? 'The server took too long to answer. Please try again.'
+          : 'Could not reach the server. Check your connection and try again.'));
+        err.retryable = true;
+        throw err;
+      }
+      return { res: res, raw: await res.text().catch(function () { return ''; }) };
+    })();
+    let got;
     try {
-      res = await fetch(CFG.API_URL, {
-        method: 'POST',
-        body: JSON.stringify(Object.assign({ action: action }, data || {})),
-        signal: ctrl ? ctrl.signal : undefined,
-      });
-    } catch (e) {
-      const err = new Error(translateError(e && e.name === 'AbortError'
-        ? 'The server took too long to answer. Please try again.'
-        : 'Could not reach the server. Check your connection and try again.'));
-      err.retryable = true;
-      throw err;
+      got = await Promise.race([request, timeout]);
     } finally {
-      if (timer) clearTimeout(timer);
+      clearTimeout(timer);
     }
+    request.catch(function () {}); // a late failure after the timeout is already handled
+    const res = got.res;
+    const raw = got.raw;
     let body;
-    const raw = await res.text().catch(function () { return ''; });
     try {
       body = JSON.parse(raw);
     } catch (e) {
