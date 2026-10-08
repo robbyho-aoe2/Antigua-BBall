@@ -89,6 +89,17 @@ While you're there, you can also change `SITE_NAME`, `TAGLINE` and `TAGLINE_ES` 
 
 After pasting `Code.gs`, choose **`testEmail`** in the function dropdown and click **▶ Run**. Approve sending email (**Advanced → Go to … → Allow**); you'll get a sample confirmation. Do this **before** redeploying.
 
+### Keep the script warm (recommended, one time)
+
+Google unloads a script that hasn't been used for a few minutes. Starting it again is why some requests take 20–30 seconds. A timer keeps it loaded:
+
+1. In the Apps Script editor, click the **⏰ Triggers** (clock) icon in the left sidebar.
+2. Click **+ Add Trigger** (bottom right).
+3. Set: **Choose which function to run:** `keepWarm` · **Event source:** Time-driven · **Type of time based trigger:** Minutes timer · **Interval:** Every 5 minutes.
+4. Click **Save**. Approve permissions if asked.
+
+It uses about 2–3 minutes of Google's free 90 minutes/day of timer time, and changes nothing in the Sheet. You'll see `keepWarm` entries in **Executions**; that's expected. To remove it, delete the trigger on the same Triggers page.
+
 ## Updating the script later (important)
 
 When you change `Code.gs` in the Apps Script editor, **the live site keeps running the old version until you redeploy.** You have two options:

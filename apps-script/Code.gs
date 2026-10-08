@@ -81,6 +81,18 @@ function testEmail() {
   Logger.log('Sent a sample email to ' + me + '. Remaining daily email quota: ' + MailApp.getRemainingDailyQuota());
 }
 
+/**
+ * Keep-warm ping. Google unloads scripts that sit idle, and starting them again
+ * is what makes some requests take 20–30 seconds. A timer that runs this every
+ * 5 minutes keeps the script (and its link to this Sheet) loaded.
+ * Set it up once: Triggers (clock icon) → Add Trigger → keepWarm →
+ * Time-driven → Minutes timer → Every 5 minutes → Save.
+ * It reads one number from the Sheet and changes nothing.
+ */
+function keepWarm() {
+  sheet_(EVENTS_SHEET).getLastRow();
+}
+
 function doGet() {
   return json_({ ok: true, message: 'Pickup signup API is running.' });
 }
