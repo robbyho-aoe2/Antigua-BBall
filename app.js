@@ -329,7 +329,8 @@
         '<div class="stat"><b>' + s.games + '</b><span>' + t('statGames') + '</span></div>' +
         '<div class="stat"><b>' + (s.streak ? I.svg('flame', 'ic-flame') + s.streak : '0') + '</b><span>' + t('statStreak') + '</span></div>' +
         '<div class="stat"><b>' + s.bestStreak + '</b><span>' + t('statBest') + '</span></div>' +
-        '<div class="stat"><b>' + s.earlyBirds + '</b><span>' + t('statFirst') + '</span></div>' +
+        // Times they signed up in spots 1–5 (past games)
+        '<div class="stat"><b>' + (s.early || 0) + '</b><span>' + t('statFirst') + '</span></div>' +
       '</div>' +
       (earned.length
         ? '<div class="badges">' +

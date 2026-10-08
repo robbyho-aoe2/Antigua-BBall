@@ -158,7 +158,7 @@ Stats are tied to your email and count **past games where you made the roster**:
 - **Games:** total games played
 - **Streak 🔥:** games in a row. Being waitlisted doesn't break a streak; skipping a game does.
 - **Best streak:** your longest streak ever
-- **First in:** how many times you were the first to sign up
+- **Early sign-ups:** how many times you signed up in the first 5 spots
 - **Badges** (only shown once earned):
   - Level, by games played (only the current one shows): 🏀 Rookie 1–5, ⭐ Regular 6–15, 🏅 Veteran 16–49, 👑 Legend 50+. Below the badges it says how many more games to the next level.
   - 🔥 On Fire: on the roster 3+ games in a row right now
