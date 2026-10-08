@@ -132,6 +132,18 @@
   }
 
   function renderHome(data) {
+    // Double-check dates here too, so a saved copy of the list never shows yesterday's game as upcoming.
+    const today = P.todayGT();
+    const nowPast = data.events.filter(function (ev) { return ev.date < today; })
+      .map(function (ev) { return Object.assign({}, ev, { past: true }); });
+    if (nowPast.length) {
+      data = Object.assign({}, data, {
+        events: data.events.filter(function (ev) { return ev.date >= today; }),
+        past: nowPast.reverse().concat((data.past || []).filter(function (p) {
+          return !nowPast.some(function (n) { return n.id === p.id; });
+        })),
+      });
+    }
     app.innerHTML =
       '<h2>' + t('upcoming') + '</h2>' +
       (data.events.length
@@ -390,6 +402,7 @@
   function renderEvent(data) {
     lastEvent = data;
     const ev = data.event;
+    if (ev.date < P.todayGT()) ev.past = true; // Guatemala time, even from a saved copy
     const mine = data.mine;
     document.title = P.fmtDate(ev.date) + ' · ' + SITE;
 

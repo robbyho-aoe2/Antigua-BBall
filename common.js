@@ -140,6 +140,21 @@
   }
 
   // Dates are "YYYY-MM-DD" strings; build them in local time so they never shift a day.
+  // Today's date in Guatemala ("YYYY-MM-DD"), whatever the phone's own time zone is.
+  // A game counts as past from midnight Guatemala time the day after it.
+  const GAME_TZ = 'America/Guatemala';
+  function todayGT() {
+    try {
+      const parts = {};
+      new Intl.DateTimeFormat('en-US', { timeZone: GAME_TZ, year: 'numeric', month: '2-digit', day: '2-digit' })
+        .formatToParts(new Date()).forEach(function (p) { parts[p.type] = p.value; });
+      return parts.year + '-' + parts.month + '-' + parts.day;
+    } catch (e) {
+      // Very old browsers: Guatemala is UTC−6 all year (no daylight saving).
+      return new Date(Date.now() - 6 * 3600 * 1000).toISOString().slice(0, 10);
+    }
+  }
+
   function toDate(ymd) {
     const p = String(ymd).split('-').map(Number);
     return new Date(p[0], p[1] - 1, p[2]);
@@ -268,7 +283,7 @@
   }
 
   window.Pickup = {
-    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, store: store, cache: cache, install: install,
+    api: api, esc: esc, fmtDate: fmtDate, fmtTime: fmtTime, fmtTimeRange: fmtTimeRange, toDate: toDate, todayGT: todayGT, store: store, cache: cache, install: install,
     toast: toast, busy: busy, applyBranding: applyBranding,
     t: t, tn: tn, locale: locale, locations: locations, findLocation: findLocation, mapsUrl: mapsUrl, useLang: useLang, lang: function () { return lang; },
   };
