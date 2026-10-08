@@ -273,6 +273,7 @@ details.find summary { cursor: pointer; color: var(--jade-700); font-weight: 600
 .edit-row { display: grid; gap: 8px; width: 100%; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .form-grid .full { grid-column: 1 / -1; }
+.updating { margin: -4px 0 10px; }
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .btn { flex: 1 1 160px; }
 

@@ -100,12 +100,40 @@
 
   /* ---------- event list ---------- */
 
-  async function showList() {
-    loading();
-    let data;
-    try { data = await adminApi('adminListEvents'); } catch (e) { if (password) showError(e); return; }
+  // Admin shows the last copy it saw right away (Google can take ~30s to answer),
+  // then swaps in fresh data. viewSeq stops a slow answer from overwriting a newer screen.
+  let viewSeq = 0;
 
+  function updatingNote(on) {
+    return on ? '<div class="updating small muted" id="updating">' + P.esc('Updating…') + '</div>' : '';
+  }
+  function markUpdated(err) {
+    const note = document.getElementById('updating');
+    if (!note) return;
+    if (err) note.textContent = 'Couldn\'t refresh (' + err.message + '). Showing your last saved copy.';
+    else note.remove();
+  }
+
+  async function showList() {
+    const seq = ++viewSeq;
+    const cached = P.cache.get('admin.list');
+    if (cached) renderList(cached, true); else loading();
+    let data;
+    try {
+      data = await adminApi('adminListEvents');
+    } catch (e) {
+      if (seq !== viewSeq) return;
+      if (!cached) { if (password) showError(e); } else markUpdated(e);
+      return;
+    }
+    if (seq !== viewSeq) return;
+    P.cache.set('admin.list', data);
+    renderList(data, false);
+  }
+
+  function renderList(data, updating) {
     app.innerHTML =
+      updatingNote(updating) +
       '<div class="toolbar">' +
         '<a class="btn primary" href="#new">+ New game</a>' +
         '<button class="btn accent" id="dup-last">Copy last game +7 days</button>' +
@@ -122,7 +150,7 @@
         } catch (err) { P.toast(err.message, true); }
       });
     };
-    document.getElementById('logout').onclick = function () { setPassword(''); showLogin(); };
+    document.getElementById('logout').onclick = function () { setPassword(''); clearAdminCache(); showLogin(); };
   }
 
   function eventRow(ev) {
@@ -149,28 +177,50 @@
 
   /* ---------- event editor ---------- */
 
+  // New game: prefill from the most recent one.
+  function newGameDefaults(list) {
+    const last = list && list.events && list.events[0];
+    const firstGym = P.locations()[0];
+    return { date: '', time: last ? last.time : '19:00', endTime: last ? last.endTime || '' : '', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, cost: last ? P.gameCost(last) : P.gameCost({}), notes: '', open: true };
+  }
+
   async function showEditor(id) {
-    loading();
-    let ev;
-    let signups = [];
+    const seq = ++viewSeq;
+    let cached = null;
+    if (id) cached = P.cache.get('admin.ev.' + id);
+    else if (P.cache.get('admin.list')) cached = { event: newGameDefaults(P.cache.get('admin.list')), signups: [] };
+    if (cached) renderEditor(id, cached.event, cached.signups, !!id); else loading();
+    if (!id && cached) return; // a new game only needs the defaults
+
+    let r;
     try {
       if (id) {
-        const r = await adminApi('adminGetEvent', { eventId: id });
-        ev = r.event;
-        signups = r.signups;
+        r = await adminApi('adminGetEvent', { eventId: id });
       } else {
-        // New game: prefill from the most recent one.
-        const r = await adminApi('adminListEvents');
-        const last = r.events[0];
-        const firstGym = P.locations()[0];
-        ev = { date: '', time: last ? last.time : '19:00', endTime: last ? last.endTime || '' : '', location: last ? last.location : (firstGym ? firstGym.name : ''), cap: last ? last.cap : 15, cost: last ? P.gameCost(last) : P.gameCost({}), notes: '', open: true };
+        const list = await adminApi('adminListEvents');
+        P.cache.set('admin.list', list);
+        r = { event: newGameDefaults(list), signups: [] };
       }
     } catch (e) {
-      if (password) showError(e);
+      if (seq !== viewSeq) return;
+      if (!cached) { if (password) showError(e); } else markUpdated(e);
       return;
     }
+    if (seq !== viewSeq) return;
+    if (id) P.cache.set('admin.ev.' + id, r);
+    const form = document.getElementById('ev-form');
+    if (cached && form && form.dataset.dirty) {
+      // Don't wipe what you're typing; just refresh the player list.
+      renderPlayers(id, r.event, r.signups);
+      markUpdated();
+    } else {
+      renderEditor(id, r.event, r.signups, false);
+    }
+  }
 
+  function renderEditor(id, ev, signups, updating) {
     app.innerHTML =
+      updatingNote(updating) +
       '<a class="back" href="#">← All games</a>' +
       '<h2>' + (id ? 'Edit game' : 'New game') + '</h2>' +
       '<form class="card" id="ev-form" novalidate>' +
@@ -197,6 +247,7 @@
         : '');
 
     const form = document.getElementById('ev-form');
+    form.addEventListener('input', function () { form.dataset.dirty = '1'; });
     const choice = field(form, 'loc-choice');
     choice.onchange = function () {
       const other = choice.value === OTHER;
@@ -221,6 +272,7 @@
           const r = await adminApi('adminSaveEvent', { event: payload });
           if (id) {
             P.toast('Saved.');
+            delete form.dataset.dirty;
             refreshPlayers(id);
           } else {
             P.toast('Game created.');
@@ -286,15 +338,39 @@
   }
 
   async function refreshPlayers(id) {
+    const seq = viewSeq;
     try {
       const r = await adminApi('adminGetEvent', { eventId: id });
-      renderPlayers(id, r.event, r.signups);
+      P.cache.set('admin.ev.' + id, r);
+      if (seq === viewSeq) renderPlayers(id, r.event, r.signups);
     } catch (e) {
       P.toast(e.message, true);
     }
   }
 
+  // Show the result of an admin change right away; refreshPlayers then confirms it.
+  let shownPlayers = null; // { id, ev, signups } currently on screen
+  function applyLocalPlayers(id, change) {
+    if (!shownPlayers || shownPlayers.id !== id) return;
+    const ev = Object.assign({}, shownPlayers.ev);
+    const signups = shownPlayers.signups.map(function (x) { return Object.assign({}, x); });
+    change(signups);
+    ev.total = signups.length;
+    ev.filled = Math.min(signups.length, ev.cap);
+    ev.waitlist = Math.max(0, signups.length - ev.cap);
+    renderPlayers(id, ev, signups);
+  }
+
+  function clearAdminCache() {
+    try {
+      Object.keys(localStorage).forEach(function (k) {
+        if (k.indexOf('pickup.cache.admin.') === 0) localStorage.removeItem(k);
+      });
+    } catch (e) { /* ignore */ }
+  }
+
   function renderPlayers(id, ev, signups) {
+    shownPlayers = { id: id, ev: ev, signups: signups };
     const box = document.getElementById('players');
     if (!box) return;
     const rows = signups.map(function (s, i) {
@@ -335,7 +411,9 @@
       if (!name) return P.toast('Enter a name.', true);
       P.busy(add.querySelector('button'), async function () {
         try {
-          await adminApi('adminAddSignup', { eventId: id, name: name, email: field(add, 'email').value });
+          const email = field(add, 'email').value;
+          await adminApi('adminAddSignup', { eventId: id, name: name, email: email });
+          applyLocalPlayers(id, function (list) { list.push({ token: '', name: name, email: email.trim().toLowerCase(), at: '' }); });
           P.toast(name + ' added.');
           refreshPlayers(id);
         } catch (err) { P.toast(err.message, true); }
@@ -355,8 +433,17 @@
           try {
             if (act === 'up' || act === 'down') {
               await adminApi('adminMoveSignup', { eventId: id, token: token, dir: act === 'up' ? -1 : 1 });
+              applyLocalPlayers(id, function (list) {
+                const i = list.findIndex(function (x) { return x.token === token; });
+                const j = i + (act === 'up' ? -1 : 1);
+                if (i >= 0 && j >= 0 && j < list.length) { const tmp = list[i]; list[i] = list[j]; list[j] = tmp; }
+              });
             } else if (act === 'remove') {
               await adminApi('adminRemoveSignup', { eventId: id, token: token });
+              applyLocalPlayers(id, function (list) {
+                const i = list.findIndex(function (x) { return x.token === token; });
+                if (i >= 0) list.splice(i, 1);
+              });
               P.toast(s.name + ' removed.');
             }
             refreshPlayers(id);
@@ -381,7 +468,12 @@
       e.preventDefault();
       P.busy(form.querySelector('button[type=submit]'), async function () {
         try {
-          await adminApi('adminUpdateSignup', { eventId: id, token: s.token, name: field(form, 'name').value, email: field(form, 'email').value });
+          const newName = field(form, 'name').value.trim();
+          const newEmail = field(form, 'email').value.trim().toLowerCase();
+          await adminApi('adminUpdateSignup', { eventId: id, token: s.token, name: newName, email: newEmail });
+          applyLocalPlayers(id, function (list) {
+            list.forEach(function (x) { if (x.token === s.token) { x.name = newName; x.email = newEmail; } });
+          });
           P.toast('Saved.');
           refreshPlayers(id);
         } catch (err) { P.toast(err.message, true); }
