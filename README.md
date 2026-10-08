@@ -3,7 +3,7 @@
 A free, simple signup site for our weekly pickup games. It replaces SignupGenie.
 
 - **Players** open one link from the group chat, type their name and email, and they're in. The first 15 (or whatever cap you set) make the **roster**. Everyone after that goes on the **waitlist**, and moves up automatically when someone drops.
-- **Stats:** games played, streaks, "first to sign up" count, badges, and a Regulars leaderboard.
+- **Stats:** games played, streaks, "first to sign up" count, badges, and a Leaderboard.
 - **You (admin)** create games, copy last week's game in one click, and manage the list. You can also just edit the Google Sheet.
 
 **How it's built:** the website is plain HTML/CSS/JS hosted free on GitHub Pages. The "database" is a Google Sheet, with a small Google Apps Script that acts as the server. No servers to pay for.
@@ -166,7 +166,7 @@ Stats are tied to your email and count **past games where you made the roster**:
   - 🐦 Early Bird: usually signs up in spots 1–5
   - 🚨 Buzzer Beater: usually signs up in spot 6 or later
 
-The home page also shows a **🏆 Regulars** top-10 leaderboard (names only).
+The home page also shows a **🏆 Leaderboard** (top 10) (names only).
 
 ### For you (admin)
 
