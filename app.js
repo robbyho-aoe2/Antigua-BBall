@@ -331,6 +331,8 @@
         '<div class="stat"><b>' + s.bestStreak + '</b><span>' + t('statBest') + '</span></div>' +
         // Times they signed up in spots 1–5 (past games)
         '<div class="stat"><b>' + (s.early || 0) + '</b><span>' + t('statFirst') + '</span></div>' +
+        // Times they signed up and later dropped out themselves
+        '<div class="stat"><b>' + (s.drops || 0) + '</b><span>' + t('statDrops') + '</span></div>' +
       '</div>' +
       (earned.length
         ? '<div class="badges">' +
@@ -542,6 +544,10 @@
         '<p class="wait-rule">' + I.svg('alert') + '<span>' + esc(t('waitRule', { cap: ev.cap })) + '</span></p>' +
         cols(data.waitlist, 'wait') + '</section>';
     }
+    if (data.dropped && data.dropped.length) {
+      html += '<section class="list-section dropped"><h3>' + t('droppedList') + ' <span class="count">' + data.dropped.length + '</span></h3>' +
+        '<ul class="dropped-names">' + data.dropped.map(function (p) { return '<li>' + esc(p.name) + '</li>'; }).join('') + '</ul></section>';
+    }
     return html;
   }
 
@@ -671,6 +677,7 @@
               d.roster = withoutName(d.roster, m.name);
               d.waitlist = withoutName(d.waitlist, m.name);
               d.mine = d.mine.filter(function (x) { return x.token !== token; });
+              d.dropped = (d.dropped || []).concat([{ name: m.name }]);
             });
             P.toast(t('dropped', { name: m.name }));
             showEvent(ev.id, true);

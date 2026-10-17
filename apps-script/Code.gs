@@ -7,7 +7,8 @@
  *
  * Data lives in two tabs (created automatically):
  *   Events:  ID | Date | Time | Location | Cap | Notes | Open | Created | EndTime | Cost
- *   Signups:    EventID | Name | Email | SignedUpAt | Order | Token | Lang
+ *   Signups:    EventID | Name | Email | SignedUpAt | Order | Token | Lang | … | DroppedAt
+ *               (DroppedAt is filled when a player drops out; the row is kept for stats)
  *   EmailPrefs: Email | Notify | Updated   (one row per email: wants confirmation emails or not)
  *
  * Confirmation emails are sent from your Gmail (about 100 recipients a day on a
@@ -106,6 +107,7 @@ function doPost(e) {
     ensureSheets_();
     OUTBOX = [];
     PREFS = null;
+    DROPPED_COL = null;
     let result;
     if (Object.prototype.hasOwnProperty.call(PUBLIC_ACTIONS, action)) {
       result = PUBLIC_ACTIONS[action](req);
@@ -168,6 +170,7 @@ function getEvent(req) {
     event: publicEvent_(ev, list, today),
     roster: names.slice(0, ev.cap),
     waitlist: names.slice(ev.cap),
+    dropped: (droppedByEvent_(readSignups_())[ev.id] || []).map(function (s) { return { name: s.name }; }),
     mine: mine,
   };
 }
@@ -220,7 +223,8 @@ function drop(req) {
     if (ev.date < today_()) fail_('This game already happened.');
     return withRosterWatch_(ev.id, function (list) {
       const s = findByToken_(list, req.token);
-      sheet_(SIGNUPS_SHEET).deleteRow(s.row);
+      // Keep the row (for the Dropped list and stats); just mark when they dropped.
+      sheet_(SIGNUPS_SHEET).getRange(s.row, droppedCol_()).setValue(new Date());
       queueEmail_(s, ev, 'dropped');
       return {};
     });
@@ -260,7 +264,7 @@ function stats(req) {
   if (!email) fail_('Enter your email to see your stats.');
   const all = computeStats_(readEvents_(), signups);
   const p = all[email] || emptyStats_();
-  return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters, last10: p.last10, early: p.early, late: p.late } };
+  return { stats: { name: p.name, games: p.games, streak: p.streak, bestStreak: p.bestStreak, earlyBirds: p.earlyBirds, buzzerBeaters: p.buzzerBeaters, last10: p.last10, early: p.early, late: p.late, drops: p.drops } };
 }
 
 /* ------------------------------------------------------------------ */
@@ -289,6 +293,14 @@ function adminGetEvent(req) {
           name: s.name,
           email: s.email,
           at: s.at ? Utilities.formatDate(new Date(s.at), TZ, 'MMM d, h:mm a') : '',
+        };
+      }),
+      dropped: (droppedByEvent_(readSignups_())[ev.id] || []).map(function (s) {
+        return {
+          token: s.token,
+          name: s.name,
+          email: s.email,
+          at: s.droppedAt ? Utilities.formatDate(new Date(s.droppedAt), TZ, 'MMM d, h:mm a') : '',
         };
       }),
     };
@@ -391,10 +403,12 @@ function adminUpdateSignup(req) {
 function adminRemoveSignup(req) {
   return withLock_(function () {
     const ev = findEvent_(req.eventId);
-    return withRosterWatch_(ev.id, function (list) {
-      const s = findByToken_(list, req.token);
+    return withRosterWatch_(ev.id, function () {
+      // Admin removal deletes the row entirely (no drop on their record); works for dropped entries too.
+      const all = readSignups_().filter(function (x) { return x.eventId === ev.id; });
+      const s = findByToken_(all, req.token);
       sheet_(SIGNUPS_SHEET).deleteRow(s.row);
-      queueEmail_(s, ev, 'removed');
+      if (!s.dropped) queueEmail_(s, ev, 'removed');
       return {};
     });
   });
@@ -409,11 +423,16 @@ function adminPlayers() {
   const events = {};
   readEvents_().forEach(function (ev) { events[ev.id] = ev; });
   const groups = {};
-  readSignups_().forEach(function (s) {
+  const signups = readSignups_();
+  // Only drops that still count (not rejoined), same as the player's stats.
+  const counted = {};
+  const byEvent = droppedByEvent_(signups);
+  Object.keys(byEvent).forEach(function (id) { byEvent[id].forEach(function (s) { counted[s.token] = true; }); });
+  signups.forEach(function (s) {
     const key = s.email ? 'email:' + s.email : 'name:' + nameKey_(s.name);
-    const g = groups[key] || (groups[key] = { key: key, email: s.email, names: [], games: 0, last: '' });
+    const g = groups[key] || (groups[key] = { key: key, email: s.email, names: [], games: 0, drops: 0, last: '' });
     if (g.names.indexOf(s.name) < 0) g.names.push(s.name);
-    g.games++;
+    if (!s.dropped) g.games++; else if (counted[s.token]) g.drops++;
     const ev = events[s.eventId];
     if (ev && ev.date > g.last) { g.last = ev.date; g.name = s.name; }
     if (!g.name) g.name = s.name;
@@ -478,7 +497,7 @@ function adminMoveSignup(req) {
 /* ------------------------------------------------------------------ */
 
 function emptyStats_() {
-  return { name: '', games: 0, streak: 0, bestStreak: 0, earlyBirds: 0, buzzerBeaters: 0, last10: 0, early: 0, late: 0 };
+  return { name: '', games: 0, streak: 0, bestStreak: 0, earlyBirds: 0, buzzerBeaters: 0, last10: 0, early: 0, late: 0, drops: 0 };
 }
 
 /**
@@ -489,6 +508,7 @@ function emptyStats_() {
  * - buzzerBeaters: times they got the last roster spot (e.g. #15 of 15)
  * - last10: how many of the group's last 10 games they played (Iron Man badge)
  * - early / late: how often they signed up in spots 1–5 vs 6+ (Early Bird / Buzzer Beater badges)
+ * - drops: games they signed up for and then dropped out of (and didn't rejoin)
  */
 function computeStats_(events, signups) {
   const today = today_();
@@ -496,6 +516,11 @@ function computeStats_(events, signups) {
   const past = events.filter(function (ev) { return ev.date < today; }).sort(byWhen_);
   const players = {};
   const get = function (email) { return players[email] || (players[email] = emptyStats_()); };
+
+  const droppedGroups = droppedByEvent_(signups);
+  Object.keys(droppedGroups).forEach(function (id) {
+    droppedGroups[id].forEach(function (s) { if (s.email) get(s.email).drops++; });
+  });
 
   const statuses = past.map(function (ev) {
     const list = groups[ev.id] || [];
@@ -564,6 +589,7 @@ function ensureSheets_() {
   const signups = ensureSheet_(ss, SIGNUPS_SHEET, SIGNUP_HEADERS, []);
   // Sheets made before the Lang column existed: add its header once.
   if (signups.getRange(1, 7).getValue() === '') signups.getRange(1, 7).setValue('Lang').setFontWeight('bold');
+  droppedCol_();
   ensureSheet_(ss, PREFS_SHEET, PREFS_HEADERS, []);
 }
 
@@ -607,8 +633,14 @@ function readSignups_() {
   const sh = sheet_(SIGNUPS_SHEET);
   const n = sh.getLastRow() - 1;
   if (n < 1) return [];
-  return sh.getRange(2, 1, n, SIGNUP_HEADERS.length).getValues().map(function (r, i) {
+  const dcol = droppedCol_();
+  const width = Math.max(SIGNUP_HEADERS.length, dcol);
+  return sh.getRange(2, 1, n, width).getValues().map(function (r, i) {
+    const d = r[dcol - 1];
+    const droppedAt = d instanceof Date ? d.getTime() : (d ? Date.parse(d) || 1 : 0);
     return {
+      dropped: droppedAt > 0,
+      droppedAt: droppedAt,
       row: i + 2,
       eventId: String(r[0]).trim(),
       name: String(r[1]).trim(),
@@ -691,9 +723,10 @@ function setPref_(email, notify) {
   PREFS = null;
 }
 
+/** Players still in each game (dropped-out rows are left out), in list order. */
 function groupByEvent_(signups) {
   const groups = {};
-  signups.forEach(function (s) { (groups[s.eventId] = groups[s.eventId] || []).push(s); });
+  signups.forEach(function (s) { if (!s.dropped) (groups[s.eventId] = groups[s.eventId] || []).push(s); });
   Object.keys(groups).forEach(function (k) {
     groups[k].sort(function (a, b) {
       // Rows without an Order (typed in by hand) go to the end, by signup time.
@@ -703,6 +736,43 @@ function groupByEvent_(signups) {
     });
   });
   return groups;
+}
+
+/**
+ * Who dropped out of each game, in the order they dropped. Someone who signed up
+ * again for the same game isn't listed (and doesn't count as a drop).
+ */
+function droppedByEvent_(signups) {
+  const active = {};
+  signups.forEach(function (s) {
+    if (!s.dropped) active[s.eventId + '|' + (s.email || nameKey_(s.name))] = true;
+  });
+  const groups = {};
+  signups.forEach(function (s) {
+    if (!s.dropped || active[s.eventId + '|' + (s.email || nameKey_(s.name))]) return;
+    (groups[s.eventId] = groups[s.eventId] || []).push(s);
+  });
+  Object.keys(groups).forEach(function (k) {
+    groups[k].sort(function (a, b) { return a.droppedAt - b.droppedAt; });
+  });
+  return groups;
+}
+
+let DROPPED_COL = null;
+
+/** Column number of "DroppedAt" in the Signups tab (added after the last column if missing). */
+function droppedCol_() {
+  if (DROPPED_COL) return DROPPED_COL;
+  const sh = SpreadsheetApp.getActive().getSheetByName(SIGNUPS_SHEET);
+  const last = Math.max(sh.getLastColumn(), SIGNUP_HEADERS.length);
+  const headers = sh.getRange(1, 1, 1, last).getValues()[0].map(function (h) { return String(h).trim(); });
+  let idx = headers.indexOf('DroppedAt');
+  if (idx < 0) {
+    idx = last; // next free column, so it never clashes with columns added by older versions
+    sh.getRange(1, idx + 1).setValue('DroppedAt').setFontWeight('bold');
+  }
+  DROPPED_COL = idx + 1;
+  return DROPPED_COL;
 }
 
 function findEvent_(id) {

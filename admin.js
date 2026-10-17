@@ -240,6 +240,7 @@
         '<li class="player-row" data-key="' + esc(p.key) + '">' +
           '<div class="who"><b>' + esc(p.name) + '</b>' +
             '<small>' + (p.email ? esc(p.email) : '<i>no email</i>') + ' · ' + p.games + ' sign-up' + (p.games === 1 ? '' : 's') +
+            (p.drops ? ' · ' + p.drops + ' drop' + (p.drops === 1 ? '' : 's') : '') +
             (others.length ? ' · also "' + others.map(esc).join('", "') + '"' : '') + '</small></div>' +
           '<div class="link-ctl"><select aria-label="Link to player">' + options(p) + '</select>' +
           '<button class="btn sm" data-act="link">Link</button></div>' +
@@ -308,7 +309,7 @@
       return;
     }
     if (seq !== viewSeq) return;
-    if (id) P.cache.set('admin.ev.' + id, r);
+    if (id) { r.event.dropped = r.dropped || []; P.cache.set('admin.ev.' + id, r); }
     const form = document.getElementById('ev-form');
     if (cached && form && form.dataset.dirty) {
       // Don't wipe what you're typing; just refresh the player list.
@@ -442,6 +443,7 @@
     const seq = viewSeq;
     try {
       const r = await adminApi('adminGetEvent', { eventId: id });
+      r.event.dropped = r.dropped || [];
       P.cache.set('admin.ev.' + id, r);
       if (seq === viewSeq) renderPlayers(id, r.event, r.signups);
     } catch (e) {
@@ -472,6 +474,7 @@
 
   function renderPlayers(id, ev, signups) {
     shownPlayers = { id: id, ev: ev, signups: signups };
+    const dropped = ev.dropped || [];
     const box = document.getElementById('players');
     if (!box) return;
     const rows = signups.map(function (s, i) {
@@ -503,7 +506,36 @@
         '<p class="hint">Players with an email get confirmation emails unless they turned them off.</p>' +
         '<button class="btn block" type="submit">Add player to the end</button>' +
       '</form>' +
-      '<ol class="names">' + (rows || '<li class="empty">No signups yet.</li>') + '</ol>';
+      '<ol class="names">' + (rows || '<li class="empty">No signups yet.</li>') + '</ol>' +
+      (dropped.length
+        ? '<h3 class="dropped-h">Dropped <span class="muted small">' + dropped.length + '</span></h3>' +
+          '<p class="hint">Signed up, then dropped out themselves. Counts toward their Drops stat. ✕ erases the record.</p>' +
+          '<ol class="names dropped-list">' + dropped.map(function (s) {
+            return '<li class="adm-row" data-dropped="' + esc(s.token) + '">' +
+              '<div class="who"><b>' + esc(s.name) + '</b><small>' + (s.email ? esc(s.email) : '<i>no email</i>') + '</small>' +
+                (s.at ? '<small>Dropped ' + esc(s.at) + '</small>' : '') + '</div>' +
+              '<div class="acts"><button class="icon-btn del" aria-label="Erase">✕</button></div></li>';
+          }).join('') + '</ol>'
+        : '');
+
+    box.querySelectorAll('[data-dropped]').forEach(function (row) {
+      const token = row.dataset.dropped;
+      const s = dropped.find(function (x) { return x.token === token; });
+      row.querySelector('button').onclick = function (e) {
+        if (!confirm('Erase ' + s.name + '\'s drop? It will no longer count in their stats.')) return;
+        P.busy(e.currentTarget, async function () {
+          try {
+            await adminApi('adminRemoveSignup', { eventId: id, token: token });
+            if (shownPlayers && shownPlayers.id === id) {
+              shownPlayers.ev.dropped = dropped.filter(function (x) { return x.token !== token; });
+              renderPlayers(id, shownPlayers.ev, shownPlayers.signups);
+            }
+            P.toast('Erased.');
+            refreshPlayers(id);
+          } catch (err) { P.toast(err.message, true); }
+        });
+      };
+    });
 
     const add = document.getElementById('add-form');
     add.onsubmit = function (e) {

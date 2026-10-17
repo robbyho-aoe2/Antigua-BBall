@@ -129,6 +129,7 @@ Changes to the website files (HTML/CSS/JS) go live on GitHub Pages automatically
 - **Email opt-in:** the first time someone signs up with an email, they choose **"Email me updates about my games"** (on by default). The choice is saved for that email and applies to all games, so they aren't asked again. They can switch it any time with **🔔 / 🔕 Turn on/off** on their "You're signed up" card, or on the **👤 "You" card** on the home page (below Upcoming games), which also shows who the phone is signed up as and their stats.
 - **Past games:** the home page lists the 8 most recent past games under the "You" card. Tap one to see the final roster. You can see or change it in the **EmailPrefs** tab (Notify TRUE/FALSE). To turn all emails off, set `SEND_EMAILS = false` near the top of `Code.gs` and redeploy.
 - **Cost reminder:** the game page shows a small line like "Q400 court · about **Q30** each with 14 players": the game's total cost split across the players on the roster (not the waitlist), rounded up to the nearest Q5. Until 6 people have signed up (`COST_MIN_PLAYERS` in `config.js`) it assumes a full roster. It updates as people sign up or drop.
+- **Dropped:** when a player drops out themselves, their row is kept (with a **DroppedAt** time) and the game page shows them in a small, crossed-out **Dropped** list under the waitlist. It counts toward their **Drops** stat. If they sign up again for the same game, it no longer counts as a drop.
 - **Waitlist:** if someone on the roster drops, the first person on the waitlist moves up automatically.
 - **Closed signups:** you can still see the roster, and players can still drop out.
 - **Past games** disappear from the main page the day after. The direct link still shows the final list.
@@ -159,6 +160,7 @@ Stats are tied to your email and count **past games where you made the roster**:
 - **Streak 🔥:** games in a row. Being waitlisted doesn't break a streak; skipping a game does.
 - **Best streak:** your longest streak ever
 - **Early sign-ups:** how many times you signed up in the first 5 spots
+- **Drops:** how many games you signed up for and then dropped out of
 - **Badges** (only shown once earned):
   - Level, by games played (only the current one shows): 🏀 Rookie 1–5, ⭐ Regular 6–15, 🏅 Veteran 16–49, 👑 Legend 50+. Below the badges it says how many more games to the next level.
   - 🔥 On Fire: on the roster 3+ games in a row right now
@@ -172,7 +174,7 @@ The home page also shows a **🏆 Leaderboard** (top 10) (names only).
 
 - Create, edit, and delete games: date, start time, optional end time, location (dropdown of your gyms, or "Other…"), roster size (default 15), notes, and an open/closed toggle. On the player page, the location links to Google Maps.
 - Manage the list: add a name (email optional), edit a name or email, remove someone, and move people up or down with ↑/↓.
-- **Players screen** (button on the games list): everyone who has signed up, grouped by email (or by name when there's no email). If the same person appears twice, e.g. added without an email one week and signed up with an email the next, or using two emails, pick who they really are and tap **Link**: their sign-ups get that email, so games, streaks and badges count together. Exact name matches are suggested automatically.
+- **Players screen** (button on the games list): everyone who has signed up, grouped by email (or by name when there's no email). If the same person appears twice, e.g. added without an email one week and signed up with an email the next, or using two emails, pick who they really are and tap **Link**: their sign-ups get that email, so games, streaks and badges count together. Exact name matches are suggested automatically. Each player also shows their drop count.
 - See every player's email and signup time. This is how you help someone who's stuck.
 - The password is checked by the server on every admin action. Your browser only remembers it until you close the tab.
 
@@ -194,12 +196,13 @@ The Sheet is meant to be readable and editable by hand:
 
 **Signups tab**
 
-| EventID | Name | Email | SignedUpAt | Order | Token | Lang |
-|---|---|---|---|---|---|
+| EventID | Name | Email | SignedUpAt | Order | Token | Lang | … | DroppedAt |
+|---|---|---|---|---|---|---|---|---|
 
 - The list is sorted by **Order** (1, 2, 3…). To reorder by hand, change the numbers. Rows with a blank Order go to the end.
 - **Token** is the player's private edit key. Leave it alone; it's filled in automatically, even for rows you add by hand.
-- To remove someone, delete their row.
+- **DroppedAt** is filled in when a player drops out. Those rows don't count as signed up; they're kept for the Drops stat. The script adds this column itself if it's missing.
+- To remove someone, delete their row. In the admin, ✕ also deletes the row, so no drop is recorded. Dropped players are listed under the game's players; ✕ there erases the drop.
 
 ---
 
