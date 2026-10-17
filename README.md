@@ -172,6 +172,7 @@ The home page also shows a **🏆 Leaderboard** (top 10) (names only).
 
 - Create, edit, and delete games: date, start time, optional end time, location (dropdown of your gyms, or "Other…"), roster size (default 15), notes, and an open/closed toggle. On the player page, the location links to Google Maps.
 - Manage the list: add a name (email optional), edit a name or email, remove someone, and move people up or down with ↑/↓.
+- **Players screen** (button on the games list): everyone who has signed up, grouped by email (or by name when there's no email). If the same person appears twice, e.g. added without an email one week and signed up with an email the next, or using two emails, pick who they really are and tap **Link**: their sign-ups get that email, so games, streaks and badges count together. Exact name matches are suggested automatically.
 - See every player's email and signup time. This is how you help someone who's stuck.
 - The password is checked by the server on every admin action. Your browser only remembers it until you close the tab.
 

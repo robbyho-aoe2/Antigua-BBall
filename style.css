@@ -273,6 +273,13 @@ details.find summary { cursor: pointer; color: var(--jade-700); font-weight: 600
 .edit-row { display: grid; gap: 8px; width: 100%; }
 .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .form-grid .full { grid-column: 1 / -1; }
+.players-h { font-size: 15px; margin: 18px 0 8px; color: var(--jade-900); }
+ol.names.players li { flex-wrap: wrap; gap: 8px; }
+.player-row .who { flex: 1 1 180px; min-width: 0; }
+.player-row .who b { display: block; }
+.player-row .who small { display: block; color: var(--stone); font-size: 12px; }
+.link-ctl { display: flex; gap: 6px; flex: 1 1 220px; }
+.link-ctl select { min-height: 40px; padding: 6px 8px; font-size: 14px; flex: 1; min-width: 0; }
 .updating { margin: -4px 0 10px; }
 .toolbar { display: flex; gap: 10px; flex-wrap: wrap; margin-bottom: 12px; }
 .toolbar .btn { flex: 1 1 160px; }

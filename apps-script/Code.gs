@@ -56,6 +56,8 @@ const ADMIN_ACTIONS = {
   adminUpdateSignup: adminUpdateSignup,
   adminRemoveSignup: adminRemoveSignup,
   adminMoveSignup: adminMoveSignup,
+  adminPlayers: adminPlayers,
+  adminLinkPlayer: adminLinkPlayer,
 };
 
 /** Run this once from the editor (select "setup" → Run) to create the tabs and approve permissions. */
@@ -398,6 +400,58 @@ function adminRemoveSignup(req) {
   });
 }
 
+/**
+ * Everyone who has signed up, grouped the way stats count them: by email, or by
+ * name for sign-ups without an email. Used by the admin Players screen to link
+ * entries that are really the same person.
+ */
+function adminPlayers() {
+  const events = {};
+  readEvents_().forEach(function (ev) { events[ev.id] = ev; });
+  const groups = {};
+  readSignups_().forEach(function (s) {
+    const key = s.email ? 'email:' + s.email : 'name:' + nameKey_(s.name);
+    const g = groups[key] || (groups[key] = { key: key, email: s.email, names: [], games: 0, last: '' });
+    if (g.names.indexOf(s.name) < 0) g.names.push(s.name);
+    g.games++;
+    const ev = events[s.eventId];
+    if (ev && ev.date > g.last) { g.last = ev.date; g.name = s.name; }
+    if (!g.name) g.name = s.name;
+  });
+  const list = Object.keys(groups).map(function (k) {
+    const g = groups[k];
+    g.nameKey = nameKey_(g.name);
+    return g;
+  });
+  list.sort(function (a, b) { return a.name.localeCompare(b.name); });
+  return { players: list };
+}
+
+/**
+ * Makes one player's sign-ups count as another's by giving them the target's email.
+ * from: 'email:x@y.com' (everything with that email) or 'name:juan perez' (sign-ups
+ * with no email and that name).
+ */
+function adminLinkPlayer(req) {
+  const toEmail = cleanEmail_(req.toEmail, true);
+  const from = String(req.from || '');
+  return withLock_(function () {
+    const sh = sheet_(SIGNUPS_SHEET);
+    let changed = 0;
+    readSignups_().forEach(function (s) {
+      const match = from.indexOf('email:') === 0
+        ? s.email === from.slice(6)
+        : (!s.email && from.indexOf('name:') === 0 && nameKey_(s.name) === from.slice(5));
+      if (match && s.email !== toEmail) {
+        sh.getRange(s.row, 3).setValue(toEmail);
+        changed++;
+      }
+    });
+    if (!changed) fail_('Nothing to link. Refresh and try again.');
+    return { changed: changed };
+  });
+}
+
 function adminMoveSignup(req) {
   const dir = Number(req.dir) < 0 ? -1 : 1;
   return withLock_(function () {
@@ -663,6 +717,12 @@ function findByToken_(list, token) {
   const s = token && list.find(function (x) { return x.token === token; });
   if (!s) fail_('Your signup was not found. It may have been removed. Refresh and try again.');
   return s;
+}
+
+/** Same name = same person for matching: ignores capitals, accents and extra spaces. */
+function nameKey_(name) {
+  return String(name || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase().replace(/\s+/g, ' ').trim();
 }
 
 function assertNameFree_(list, name, exceptToken) {

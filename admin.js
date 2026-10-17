@@ -50,6 +50,7 @@
     if (!password) return showLogin();
     const h = location.hash;
     if (h === '#new') return showEditor(null);
+    if (h === '#players') return showPlayersScreen();
     const m = /^#event=(.+)$/.exec(h);
     if (m) return showEditor(decodeURIComponent(m[1]));
     showList();
@@ -149,6 +150,7 @@
       updatingNote(updating) +
       '<div class="toolbar">' +
         '<a class="btn primary" href="#new">+ New game</a>' +
+        '<a class="btn" href="#players">Players</a>' +
         '<button class="btn accent" id="dup-last">Copy last game +7 days</button>' +
       '</div>' +
       (data.events.length ? data.events.map(eventRow).join('') : '<div class="card muted">No games yet. Create your first one.</div>') +
@@ -187,6 +189,91 @@
         '<span class="chev" aria-hidden="true">›</span>' +
       '</a>'
     );
+  }
+
+  /* ---------- players: link entries that are the same person ---------- */
+
+  async function showPlayersScreen() {
+    const seq = ++viewSeq;
+    const cached = P.cache.get('admin.players');
+    if (cached) renderPlayersScreen(cached, true); else loading();
+    let data;
+    try {
+      data = await adminApi('adminPlayers');
+    } catch (e) {
+      if (seq !== viewSeq) return;
+      if (!cached) { if (password) showError(e); } else markUpdated(e);
+      return;
+    }
+    if (seq !== viewSeq) return;
+    P.cache.set('admin.players', data);
+    renderPlayersScreen(data, false);
+  }
+
+  function renderPlayersScreen(data, updating) {
+    const players = data.players || [];
+    const withEmail = players.filter(function (p) { return p.email; });
+    const noEmail = players.filter(function (p) { return !p.email; });
+    const keyOf = function (n) {
+      return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+    };
+    // Suggest a player with an email whose name matches exactly (capitals/accents ignored).
+    const suggest = function (p) {
+      const keys = p.names.map(keyOf);
+      const hit = withEmail.find(function (o) {
+        return o.key !== p.key && o.names.some(function (n) { return keys.indexOf(keyOf(n)) >= 0; });
+      });
+      return hit ? hit.email : '';
+    };
+    const options = function (p) {
+      const pick = suggest(p);
+      return '<option value="">Link to…</option>' + withEmail
+        .filter(function (o) { return o.key !== p.key; })
+        .map(function (o) {
+          return '<option value="' + esc(o.email) + '"' + (o.email === pick ? ' selected' : '') + '>' +
+            esc(o.name) + ' (' + esc(o.email) + ')</option>';
+        }).join('');
+    };
+    const row = function (p) {
+      const others = p.names.filter(function (n) { return n !== p.name; });
+      return (
+        '<li class="player-row" data-key="' + esc(p.key) + '">' +
+          '<div class="who"><b>' + esc(p.name) + '</b>' +
+            '<small>' + (p.email ? esc(p.email) : '<i>no email</i>') + ' · ' + p.games + ' sign-up' + (p.games === 1 ? '' : 's') +
+            (others.length ? ' · also "' + others.map(esc).join('", "') + '"' : '') + '</small></div>' +
+          '<div class="link-ctl"><select aria-label="Link to player">' + options(p) + '</select>' +
+          '<button class="btn sm" data-act="link">Link</button></div>' +
+        '</li>'
+      );
+    };
+    app.innerHTML =
+      updatingNote(updating) +
+      '<a class="back" href="#">← All games</a>' +
+      '<h2>Players</h2>' +
+      '<p class="hint" style="margin-top:0">Stats follow the email on each sign-up. If the same person shows up twice ' +
+        '(e.g. added without an email one week, signed up with an email the next), pick who they really are and tap ' +
+        '<b>Link</b>: their sign-ups get that email and their games count together.</p>' +
+      (noEmail.length ? '<h3 class="players-h">Not linked (no email) · ' + noEmail.length + '</h3><ol class="names players">' + noEmail.map(row).join('') + '</ol>' : '') +
+      '<h3 class="players-h">With email · ' + withEmail.length + '</h3>' +
+      (withEmail.length ? '<ol class="names players">' + withEmail.map(row).join('') + '</ol>' : '<p class="muted small">Nobody with an email yet.</p>');
+
+    app.querySelectorAll('.player-row').forEach(function (li) {
+      const p = players.find(function (x) { return x.key === li.dataset.key; });
+      li.querySelector('[data-act="link"]').onclick = function (e) {
+        const toEmail = li.querySelector('select').value;
+        if (!toEmail) return P.toast('Pick who this player is first.', true);
+        const target = withEmail.find(function (o) { return o.email === toEmail; });
+        if (!confirm('Link "' + p.name + '" (' + (p.email || 'no email') + ') to ' + target.name + ' (' + toEmail + ')?\n\n' +
+          'Their ' + p.games + ' sign-up' + (p.games === 1 ? '' : 's') + ' will use ' + toEmail + ' and count as the same player.')) return;
+        P.busy(e.currentTarget, async function () {
+          try {
+            const r = await adminApi('adminLinkPlayer', { from: p.key, toEmail: toEmail });
+            P.toast('Linked ' + r.changed + ' sign-up' + (r.changed === 1 ? '' : 's') + ' to ' + target.name + '.');
+            showPlayersScreen();
+          } catch (err) { P.toast(err.message, true); }
+        });
+      };
+    });
   }
 
   /* ---------- event editor ---------- */
