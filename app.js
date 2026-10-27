@@ -119,7 +119,7 @@
     if (me().email) getStats(me().email); // fetch in parallel with the list
     let data;
     try {
-      data = await P.api('listEvents');
+      data = await P.api('listEvents', me().email ? { email: me().email } : {});
     } catch (e) {
       if (seq === renderSeq && !cached) showError(e);
       return;
@@ -159,7 +159,12 @@
 
   function pastHtml(past) {
     if (!past || !past.length) return '';
-    return '<h2>' + t('pastGames') + '</h2>' + past.map(eventCard).join('');
+    const SHOWN = 3;
+    return '<h2>' + t('pastGames') + '</h2>' + past.slice(0, SHOWN).map(eventCard).join('') +
+      (past.length > SHOWN
+        ? '<details class="more-past"><summary>' + t('showMorePast', { n: past.length - SHOWN }) + '</summary>' +
+          past.slice(SHOWN).map(eventCard).join('') + '</details>'
+        : '');
   }
 
   // The server changes the choice for whoever owns a signup, so use any signup this phone remembers.
@@ -215,7 +220,7 @@
   function eventCard(ev) {
     const d = P.toDate(ev.date);
     const pct = Math.min(100, Math.round((ev.filled / ev.cap) * 100));
-    const mine = tokensFor(ev.id).length > 0;
+    const mine = tokensFor(ev.id).length > 0 || (ev.past && ev.mine);
     return (
       '<a class="card event-card' + (ev.past ? ' past-card' : '') + '" data-nav href="?event=' + encodeURIComponent(ev.id) + '">' +
         '<div class="date-badge">' +
@@ -362,13 +367,13 @@
     if (me().email) getStats(me().email); // fetch in parallel with the game
     let data;
     try {
-      data = await P.api('getEvent', { eventId: id, tokens: tokens });
+      data = await P.api('getEvent', { eventId: id, tokens: tokens, email: me().email || '' });
     } catch (e) {
       if (seq === renderSeq && !cached) showError(e);
       return;
     }
     // Forget signups that were dropped or removed by the admin.
-    const live = data.mine.map(function (m) { return m.token; });
+    const live = data.mine.map(function (m) { return m.token; }).filter(Boolean);
     if (tokens.some(function (t) { return live.indexOf(t) < 0; })) setTokens(id, live);
     if (data.mine.length && typeof data.mine[0].notify === 'boolean') setMe({ notify: data.mine[0].notify });
     P.cache.set(cacheKey, { tokens: tokensFor(id), data: data });

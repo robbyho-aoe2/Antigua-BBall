@@ -130,8 +130,9 @@ function doPost(e) {
 /* Public actions                                                      */
 /* ------------------------------------------------------------------ */
 
-function listEvents() {
+function listEvents(req) {
   const today = today_();
+  const email = String((req && req.email) || '').trim().toLowerCase();
   const events = readEvents_();
   const signups = readSignups_();
   const groups = groupByEvent_(signups);
@@ -143,7 +144,13 @@ function listEvents() {
     .filter(function (ev) { return ev.date < today; })
     .sort(function (a, b) { return byWhen_(b, a); })
     .slice(0, PAST_GAMES_SHOWN)
-    .map(function (ev) { return publicEvent_(ev, groups[ev.id] || [], today); });
+    .map(function (ev) {
+      const list = groups[ev.id] || [];
+      const out = publicEvent_(ev, list, today);
+      // Past games only: mark the ones this email played, even if they signed up on another phone.
+      if (email && list.some(function (s) { return s.email === email; })) out.mine = true;
+      return out;
+    });
   return { events: upcoming, past: past, leaders: leaderboard_(computeStats_(events, signups)) };
 }
 
@@ -166,6 +173,15 @@ function getEvent(req) {
       waitlistPosition: idx < ev.cap ? 0 : idx - ev.cap + 1,
     });
   });
+  // Past games: also show "you" for sign-ups made with this email on another phone.
+  // No token is sent back, so this can't be used to edit anything.
+  const email = String(req.email || '').trim().toLowerCase();
+  if (email && ev.date < today) {
+    list.forEach(function (s, idx) {
+      if (s.email !== email || tokens.indexOf(s.token) >= 0) return;
+      mine.push({ token: '', name: s.name, position: idx + 1, onRoster: idx < ev.cap, waitlistPosition: idx < ev.cap ? 0 : idx - ev.cap + 1 });
+    });
+  }
   return {
     event: publicEvent_(ev, list, today),
     roster: names.slice(0, ev.cap),

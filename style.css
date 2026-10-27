@@ -354,3 +354,9 @@ footer a { color: var(--stone); }
 .dropped-h { margin-top: 18px; }
 .dropped-list .who b { color: var(--stone); text-decoration: line-through; }
 @media (max-width: 380px) { .stat span { font-size: 10px; letter-spacing: 0; } .stat b { font-size: 20px; } }
+
+/* Older past games, collapsed */
+.more-past > summary { cursor: pointer; color: var(--jade-700, #24502f); font-weight: 600; padding: 4px 2px 10px; list-style: none; }
+.more-past > summary::-webkit-details-marker { display: none; }
+.more-past > summary::before { content: '▸ '; }
+.more-past[open] > summary::before { content: '▾ '; }
