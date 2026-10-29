@@ -288,6 +288,8 @@
 
   async function showEditor(id) {
     const seq = ++viewSeq;
+    pickQuery = '';
+    pickLoaded = false;
     let cached = null;
     if (id) cached = P.cache.get('admin.ev.' + id);
     else if (P.cache.get('admin.list')) cached = { event: newGameDefaults(P.cache.get('admin.list')), signups: [] };
@@ -453,6 +455,71 @@
 
   // Show the result of an admin change right away; refreshPlayers then confirms it.
   let shownPlayers = null; // { id, ev, signups } currently on screen
+
+  /* ---------- quick add: pick someone who has played before ---------- */
+
+  let pickQuery = '';
+  let pickLoaded = false;
+  const nameKey = function (n) {
+    return String(n || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/\s+/g, ' ').trim();
+  };
+
+  // Everyone from the Players list, fetched once per visit to a game (cached copy shown first).
+  function loadPastPlayers(id) {
+    if (pickLoaded) return;
+    pickLoaded = true;
+    adminApi('adminPlayers').then(function (data) {
+      P.cache.set('admin.players', data);
+      if (shownPlayers && shownPlayers.id === id) renderPick(id);
+    }).catch(function () { pickLoaded = false; });
+  }
+
+  function renderPick(id) {
+    const box = document.getElementById('pick-list');
+    if (!box || !shownPlayers) return;
+    const players = (P.cache.get('admin.players') || {}).players;
+    if (!players) { box.innerHTML = '<li class="empty">Loading players…</li>'; return; }
+    const signups = shownPlayers.signups;
+    const inGame = function (p) {
+      return signups.some(function (s) {
+        return (p.email && s.email === p.email) || (!p.email && nameKey(s.name) === nameKey(p.name));
+      });
+    };
+    const q = nameKey(pickQuery);
+    const matches = players.filter(function (p) {
+      if (inGame(p)) return false;
+      if (!q) return true;
+      return p.names.concat([p.email || '']).some(function (n) { return nameKey(n).indexOf(q) >= 0; });
+    }).sort(function (a, b) {
+      // Most recent players first, then the ones who come most often.
+      return (b.last || '').localeCompare(a.last || '') || b.games - a.games || a.name.localeCompare(b.name);
+    });
+    const LIMIT = q ? 20 : 8;
+    box.innerHTML = matches.length
+      ? matches.slice(0, LIMIT).map(function (p) {
+          return '<li><button type="button" class="pick" data-key="' + esc(p.key) + '">' +
+            '<span class="plus">+</span><span class="who"><b>' + esc(p.name) + '</b>' +
+            '<small>' + (p.email ? esc(p.email) : 'no email') + ' · ' + p.games + ' game' + (p.games === 1 ? '' : 's') + '</small></span>' +
+          '</button></li>';
+        }).join('') +
+        (matches.length > LIMIT ? '<li class="empty">' + (matches.length - LIMIT) + ' more… type to search</li>' : '')
+      : '<li class="empty">' + (q ? 'No past player matches "' + esc(pickQuery) + '". Add them below.' : 'Everyone is already in this game.') + '</li>';
+
+    box.querySelectorAll('button.pick').forEach(function (btn) {
+      btn.onclick = function () {
+        const p = players.find(function (x) { return x.key === btn.dataset.key; });
+        P.busy(btn, async function () {
+          try {
+            await adminApi('adminAddSignup', { eventId: id, name: p.name, email: p.email || '' });
+            applyLocalPlayers(id, function (list) { list.push({ token: '', name: p.name, email: p.email || '', at: '' }); });
+            P.toast(p.name + ' added.');
+            pickQuery = '';
+            refreshPlayers(id);
+          } catch (err) { P.toast(err.message, true); }
+        });
+      };
+    });
+  }
   function applyLocalPlayers(id, change) {
     if (!shownPlayers || shownPlayers.id !== id) return;
     const ev = Object.assign({}, shownPlayers.ev);
@@ -498,7 +565,13 @@
     box.innerHTML =
       '<h2>Players <span class="muted small">' + ev.filled + '/' + ev.cap +
         (ev.waitlist ? ' · ' + ev.waitlist + ' waitlisted' : '') + '</span></h2>' +
+      '<div class="card pick-card">' +
+        '<label for="pick-q">Add a past player</label>' +
+        '<input id="pick-q" type="search" placeholder="Search by name or email" autocomplete="off" value="' + esc(pickQuery) + '">' +
+        '<ul class="pick-list" id="pick-list"></ul>' +
+      '</div>' +
       '<form class="card" id="add-form" novalidate>' +
+        '<div class="add-h">New player</div>' +
         '<div class="form-grid">' +
           '<div><label for="a-name">Name</label><input id="a-name" name="name" type="text" maxlength="40" required></div>' +
           '<div><label for="a-email">Email (optional)</label><input id="a-email" name="email" type="email" inputmode="email" maxlength="100"></div>' +
@@ -536,6 +609,11 @@
         });
       };
     });
+
+    const pickInput = document.getElementById('pick-q');
+    pickInput.oninput = function () { pickQuery = pickInput.value; renderPick(id); };
+    renderPick(id);
+    loadPastPlayers(id);
 
     const add = document.getElementById('add-form');
     add.onsubmit = function (e) {
